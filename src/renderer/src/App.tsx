@@ -26,6 +26,7 @@ import { WhatsNew } from './components/Update'
 import { CoreDown, Toasts } from './components/Toast'
 import { Icon } from './components/ui'
 import { NameModal } from './components/People'
+import { AutoMode } from './components/Auto'
 
 export function App(): ReactNode {
   const view = useStore((s) => s.view)
@@ -36,6 +37,7 @@ export function App(): ReactNode {
   // A server's page in the desktop app on a Mac: the window's buttons are over it, as over the app's own.
   const mac = useStore((s) => s.platform === 'mac') || window.tucano?.places?.os === 'darwin'
   const navOpen = useStore((s) => s.navOpen)
+  const auto = useStore((s) => s.settings.auto === true)
   const tab = hubTab(view)
 
   useEffect(() => {
@@ -55,7 +57,8 @@ export function App(): ReactNode {
   useEffect(() => {
     const keys = (e: KeyboardEvent): void => {
       const mod = mac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey
-      if (!mod || e.altKey || intro || guest) return
+      // In Tucano Auto the screens these go to aren't there: the keys stay the page's own.
+      if (!mod || e.altKey || intro || guest || auto) return
       const s = getState()
       const channels = s.conversations.filter((c) => c.kind === 'channel')
       if (e.key === 'k') openDialog(s.dialog?.kind === 'search' ? null : { kind: 'search' })
@@ -67,7 +70,7 @@ export function App(): ReactNode {
     }
     window.addEventListener('keydown', keys)
     return () => window.removeEventListener('keydown', keys)
-  }, [intro, guest, mac])
+  }, [intro, guest, mac, auto])
 
   // The core may stop before the app shows: the banner says so even then.
   if (!view)
@@ -82,6 +85,18 @@ export function App(): ReactNode {
       <>
         {guest ? <GuestWelcome /> : <Intro />}
         <Dialogs />
+        <Toasts />
+        <CoreDown />
+      </>
+    )
+  // Tucano Auto: one conversation, the team behind it (components/Auto.tsx). The builder screen
+  // still opens over it, since building the team is where the mode sends an empty one.
+  if (auto && view.kind !== 'tuca')
+    return (
+      <>
+        <AutoMode />
+        <Dialogs />
+        <Lightbox />
         <Toasts />
         <CoreDown />
       </>
