@@ -412,7 +412,7 @@ export interface RoutineEvent {
 // waited its turn, isn't what it answers (another reply is, or it was merged in, see `waiting`).
 // `replyTo`: the message a person wrote that this reply answers (a mention's, a DM's), kept on its run.
 // `routineAsk`: on a routine's run, the message the routine posted (the reply keeps it, so the conversation shows them together).
-type ReplyOpts = { depth: number; job?: string; autoContinued?: number; existing?: Message; task?: string; work?: string; routine?: boolean; routineAsk?: string; threadId?: string; trigger?: string; replyTo?: string; for?: Person; handed?: string } // for: whom it's for, when it isn't read from the conversation (an answer back)
+type ReplyOpts = { depth: number; job?: string; autoContinued?: number; existing?: Message; task?: string; work?: string; routine?: boolean; routineAsk?: string; threadId?: string; trigger?: string; replyTo?: string; for?: Person; handed?: string; artifacts?: string[] } // artifacts: Tucano Auto, files the team made, carried on the Tuca's delivery; for: whom it's for, when it isn't read from the conversation (an answer back)
 
 // What a person wrote into a reply that was already running (`send` with mode 'steer'): the agent
 // reads it with its next tool result, and the reply's own chain carries it, in their words, from the
@@ -471,7 +471,8 @@ export class Runner {
   // agent is still replying there starts when that reply ends (it reads what that reply said).
   private waiting = new Map<string, { trigger: string; queued: boolean; start: () => void }>()
   // What came back from an agent's team while it was replying where it asked: told when that reply ends.
-  private tells = new Map<string, () => void>()
+  // Tucano Auto: by request too (a person's requests in the one DM each have their own delivery), '' elsewhere.
+  private tells = new Map<string, Map<string, () => void>>()
   // What waits for the agent to finish there: a prompt the person marked as queued, and what goes on
   // with a reply the person is already reading there (an approval's outcome, a question's refusal, a
   // browser hand-back). In the order they came, off the queue (startReply).
@@ -1307,7 +1308,7 @@ export class Runner {
     // Then a routed reply; what came back from its team is told on the turn after.
     const routed = this.waiting.get(key)
     if (routed) routed.start()
-    else this.tells.get(key)?.()
+    else this.tells.get(key)?.values().next().value?.()
   }
 
   // A reply not routed nor handed off (those wait in routed and handOff). A message of the person's own
@@ -1476,6 +1477,10 @@ export class Runner {
     // How many times it already tried again by itself, after something that passes (waitToRetry).
     const retries = opts.existing?.run?.retries
     const again = { ...(task ? { task } : {}), ...(handedId ? { handed: handedId } : {}), ...(autoContinued ? { autoContinued } : {}), ...(retries ? { retries } : {}) }
+    // Tucano Auto: the files the team made travel on the Tuca's delivery, from its first saved run on, so a
+    // delivery that is stopped or fails still shows them. Not in `again`: later saves spread it over `base`.
+    const carried = [...new Set(opts.artifacts ?? [])]
+    const withCarried = carried.length ? { artifactIds: carried } : {}
     const replyTo = opts.trigger ?? opts.replyTo ?? opts.existing?.run?.replyTo
     // The job this reply is part of: handed along (a hand-off, a request, what came back), kept on a retry, or
     // set off by the message it answers. One with none starts its own (a routine's run, an approval's outcome).
@@ -1483,7 +1488,7 @@ export class Runner {
     const job = this.jobOf(jobId) ?? this.startJob(jobId, conv, msg.threadId, replyTo, task)
     // A routine's run, tried again by the routine or by hand, still answers the routine's message.
     const routineAskId = opts.routineAsk ?? opts.existing?.run?.routineAsk
-    msg.run = { status: 'working', depth: opts.depth, steps: [thinking()], ...again, ...(replyTo ? { replyTo } : {}), ...(routineAskId ? { routineAsk: routineAskId } : {}), job: jobId, ...decidedCards(opts.existing?.run) }
+    msg.run = { status: 'working', depth: opts.depth, steps: [thinking()], ...again, ...withCarried, ...(replyTo ? { replyTo } : {}), ...(routineAskId ? { routineAsk: routineAskId } : {}), job: jobId, ...decidedCards(opts.existing?.run) }
     // Only a new execution replaces this reply's reasoning; tool/steering updates do not.
     let attemptStart = true
     const save = (patch: Partial<Message> = {}): void => {
@@ -1521,7 +1526,7 @@ export class Runner {
     if (used >= ceiling) {
       save({
         text: L('Parei: usei todo o meu limite de tokens deste mês. Dá pra aumentar na minha página.', "I stopped: I've used all my tokens for this month. It can be raised on my page."),
-        run: { status: 'limit_reached', endedAt: Date.now(), depth: opts.depth, steps: [], ...again }
+        run: { status: 'limit_reached', endedAt: Date.now(), depth: opts.depth, steps: [], ...again, ...withCarried }
       })
       return msg
     }
@@ -1536,6 +1541,7 @@ export class Runner {
           depth: opts.depth,
           steps: [],
           ...again,
+          ...withCarried,
           error: L(
             `A conta “${account.name}” do ${ENGINES[engineId].label} não está logada. Entre nela em Configurações › Modelos › Contas e mande de novo.`,
             `The “${account.name}” ${ENGINES[engineId].label} account isn't signed in. Sign in under Settings › Models › Accounts and send it again.`
@@ -1553,6 +1559,7 @@ export class Runner {
           depth: opts.depth,
           steps: [],
           ...again,
+          ...withCarried,
           error: L(
             `O ${ENGINES[engineId].label} ${status.installed ? 'não está logado' : 'não está instalado'}. Resolva em Configurações e mande de novo.`,
             `${ENGINES[engineId].label} ${status.installed ? "isn't signed in" : "isn't installed"}. Fix it in Settings and send it again.`
@@ -1728,7 +1735,7 @@ export class Runner {
     let confirming = false // in a DM, a question to someone else waits for the DM's person's yes first
     let approval: Approval | undefined
     const memoryIds: string[] = []
-    const artifactIds: string[] = []
+    const artifactIds: string[] = [...carried]
     const services: string[] = []
     const routineIds: string[] = []
     const exposed = new Map<string, Exposed>()
@@ -2064,7 +2071,7 @@ ${note}`,
             channel = picked
             d = this.delegate(agent, to, channel, ask, msg, requester, settings.workspaceName)
             // The parts already under way learn of this one at their next step: no one does another's part.
-            for (const x of db.delegationsFrom(agent.id, d.originConversationId, d.originThreadId)) if (x.id !== d.id && x.state === 'open') this.noteFor(x.id, teammateNote('asked', to.name, ask.text))
+            for (const x of this.peersOf(d)) if (x.id !== d.id && x.state === 'open') this.noteFor(x.id, teammateNote('asked', to.name, ask.text))
           }
           delegated.push(refOf(d))
           msg.run = { ...msg.run!, delegations: [...delegated] }
@@ -2538,7 +2545,7 @@ ${note}`,
             computerDown = out.down
             halt('computer')
           }
-          if (out.artifact) artifactIds.push(out.artifact.id)
+          if (out.artifact && !artifactIds.includes(out.artifact.id)) artifactIds.push(out.artifact.id)
           if (out.service && !services.includes(out.service)) services.push(out.service)
           msg.run = {
             ...msg.run!,
@@ -2562,7 +2569,7 @@ ${note}`,
           save()
           const out = await browser.call(current, name, args, { conversationId: conv.id, messageId: msg.id, personId: requester.id })
           sawOutside() // a page is someone else's text
-          if (out.artifact) artifactIds.push(out.artifact.id)
+          if (out.artifact && !artifactIds.includes(out.artifact.id)) artifactIds.push(out.artifact.id)
           const close = (status: Step['status'], patch: Partial<Step> = {}): Step[] => msg.run!.steps.map((s) => (s.id === step.id ? { ...s, ...patch, status, ms: Date.now() - t0 } : s))
           // A risky click or key: by how far this agent goes on its own, it waits for me, runs now, or never.
           const risky = out.approval ? verdict({ cls: 'write', kinds: ['browser'], p: await policyNow(), outside, askByDefault: true }) : undefined
@@ -3288,7 +3295,7 @@ ${note}`,
       if (approval && handedNow) {
         // Shown with the request where it was asked from, so the person approves it from there too.
         this.keep({ ...handedNow, approval: approval.id })
-        this.tellAsker(handedNow.from, handedNow.originConversationId, handedNow.originThreadId)
+        this.tellAsker(handedNow)
       }
       // The Mac tells you when it's your turn: a question, or the end of the work (once, when no other agent takes it on).
       if (!question && !approval) {
@@ -4249,7 +4256,7 @@ ${note}`,
   private askContextOf(d: Delegation, job: Job | undefined, me: string): AskContext {
     const { db } = this.deps
     const name = (id: string): string => db.agent(id)?.name ?? L('agente removido', 'removed agent')
-    const all = db.delegationsFrom(d.from, d.originConversationId, d.originThreadId).filter((x) => x.createdAt >= (job?.createdAt ?? 0))
+    const all = this.peersOf(d).filter((x) => x.createdAt >= (job?.createdAt ?? 0))
     const delivered = all.flatMap((x) => {
       const end = x.id !== d.id && x.state === 'done' && x.result ? db.message(x.result) : undefined
       return end?.text.trim() ? [{ to: name(x.to), text: end.text }] : []
@@ -4269,9 +4276,9 @@ ${note}`,
     // The parts of the same work still under way hear of this one at their next step.
     if (state === 'done' && last?.text.trim()) {
       const who = this.deps.db.agent(d.to)?.name ?? L('um colega', 'a teammate')
-      for (const x of this.deps.db.delegationsFrom(d.from, d.originConversationId, d.originThreadId)) if (x.id !== d.id && x.state === 'open') this.noteFor(x.id, teammateNote('done', who, last.text))
+      for (const x of this.peersOf(d)) if (x.id !== d.id && x.state === 'open') this.noteFor(x.id, teammateNote('done', who, last.text))
     }
-    this.tellAsker(d.from, d.originConversationId, d.originThreadId)
+    this.tellAsker(d)
   }
 
   // A question left on handed work: it shows where the work was asked from, and whoever asked gets the turn.
@@ -4279,7 +4286,7 @@ ${note}`,
   // with the question alone, and the person reads none of it unless the asker brings it to them.
   private askedUp(d: Delegation, _agent: Agent, msg: Message, _question: string): void {
     this.keep({ ...d, asking: msg.id, askingTold: false })
-    this.tellAsker(d.from, d.originConversationId, d.originThreadId)
+    this.tellAsker(d)
   }
 
   // Whoever asked gets the turn where it asked, once for everything that came back since it last heard:
@@ -4290,15 +4297,21 @@ ${note}`,
     return this.lastOf(d)?.run?.status === 'waiting_approval'
   }
 
-  private tellAsker(from: string, conversationId: string, threadId: string | undefined, now = Date.now()): void {
+  // Tucano Auto: the person's requests share the one DM, so each request (its job) is told on its own:
+  // `d` says which one. Out of Auto, `d` only says where.
+  private tellAsker(d0: Delegation, now = Date.now()): void {
     const { db } = this.deps
+    const { from, originConversationId: conversationId, originThreadId: threadId } = d0
     const key = replyKey(from, conversationId, threadId)
+    const request = this.autoRequest(d0)
     const go = (): void => {
-      this.tells.delete(key)
+      const waiting = this.tells.get(key)
+      waiting?.delete(request ?? '')
+      if (waiting && !waiting.size) this.tells.delete(key)
       const agent = db.agent(from)
       const conv = db.conversation(conversationId)
       if (!agent || agent.archived || !conv || this.paused) return
-      const all = db.delegationsFrom(from, conversationId, threadId)
+      const all = this.peersOf(d0)
       const place = (d: Delegation): { d: Delegation; to: string; channel: string } => ({ d, to: db.agent(d.to)?.name ?? L('agente removido', 'removed agent'), channel: placeOf(db.conversation(d.conversationId)) })
       const returned: Returned[] = all.flatMap((d): Returned[] => {
         if (d.state !== 'open') {
@@ -4332,11 +4345,46 @@ ${note}`,
       const behalf = first && (shared ? { ...first, access: shared } : first)
       const requester = behalf ?? requesterOf(db, conv, [], threadId)
       const me = requester.id === db.ownerId() ? undefined : requester.name
+      // Tucano Auto: the person sees only the Tuca, so the files the team made go on his delivery, where
+      // they show (what the person may see: not a file from a conversation of someone else's).
+      const artifacts = agent.kind === 'tuca' && this.autoDm(conv.id) ? this.filesOf(returned, requester) : []
       this.followups.reserve(key)
-      this.enqueue(async () => this.execute(agent, conv, { depth: 1, threadId, task: returnTask(returned, open.map((d) => ({ ...place(d), parked: this.onApproval(d) })), me ?? (await this.deps.settings()).workspaceName, agent.kind === 'tuca' && this.autoDm(conv.id)), reserved: true, ...(behalf ? { for: behalf } : {}), ...(jobId ? { job: jobId } : {}) }), true, agent)
+      this.enqueue(async () => this.execute(agent, conv, { depth: 1, threadId, ...(artifacts.length ? { artifacts } : {}), task: returnTask(returned, open.map((d) => ({ ...place(d), parked: this.onApproval(d) })), me ?? (await this.deps.settings()).workspaceName, agent.kind === 'tuca' && this.autoDm(conv.id)), reserved: true, ...(behalf ? { for: behalf } : {}), ...(jobId ? { job: jobId } : {}) }), true, agent)
     }
-    if (this.followups.busy(key)) this.tells.set(key, go)
+    if (this.followups.busy(key)) this.tells.set(key, (this.tells.get(key) ?? new Map()).set(request ?? '', go))
     else go()
+  }
+
+  // The files that came back with the work of the ones that finished or failed: on their end and on what else
+  // they wrote in their thread. Only those that exist and that `who` may see, once each, in order.
+  private filesOf(returned: Returned[], who: Person): string[] {
+    const { db } = this.deps
+    const sees = new People(db)
+    const ids: string[] = []
+    for (const r of returned) {
+      if (r.what !== 'done' && r.what !== 'failed') continue
+      const end = r.d.result ? db.message(r.d.result) : undefined
+      const others = db.recentMessages(r.d.conversationId, 200, workThread(r.d)).filter((m) => m.author.kind === 'agent' && m.author.id === r.d.to && m.at >= r.d.createdAt)
+      for (const m of [...(end ? [end] : []), ...others]) ids.push(...(m.run?.artifactIds ?? []))
+    }
+    return [...new Set(ids)].filter((id) => {
+      const a = db.artifact(id)
+      return !!a && sees.canSeeConversation(who, db.conversation(a.conversationId)) && sees.artifactVisible(who, a)
+    })
+  }
+
+  // Tucano Auto: what tells one request of the person's from another in the Tuca's DM (originThreadId is
+  // undefined for all of them there): the job its message belongs to. Undefined elsewhere, where the thread tells.
+  private autoRequest(d: Pick<Delegation, 'originConversationId' | 'originThreadId' | 'originMessageId'>): string | undefined {
+    if (d.originThreadId || !this.autoDm(d.originConversationId)) return undefined
+    return this.deps.db.message(d.originMessageId)?.run?.job ?? d.originMessageId
+  }
+
+  // What was asked from the same place as `d`, and in Tucano Auto of the same request only.
+  private peersOf(d: Delegation): Delegation[] {
+    const all = this.deps.db.delegationsFrom(d.from, d.originConversationId, d.originThreadId)
+    const request = this.autoRequest(d)
+    return request === undefined ? all : all.filter((x) => this.autoRequest(x) === request)
   }
 
   // A question that went up and that a person answered right where it was left: the question whoever asked
@@ -4344,7 +4392,7 @@ ${note}`,
   // request's question too, still waiting: that one is still to answer there.
   private closeRelay(d: Delegation, asked: Message): void {
     const { db, emit } = this.deps
-    const others = db.delegationsFrom(d.from, d.originConversationId, d.originThreadId).some((x) => x.id !== d.id && x.state === 'open' && x.asking && x.askingTold)
+    const others = this.peersOf(d).some((x) => x.id !== d.id && x.state === 'open' && x.asking && x.askingTold)
     if (others) return
     const relay = db
       .messagesWithRun(['waiting_input'])
@@ -4419,11 +4467,13 @@ ${note}`,
       if (now - (last.run.endedAt ?? last.at) < 60_000) continue // its own reply settles it; this is for the ones that never got to
       this.settle(d, last.run.status === 'stopped' ? 'cancelled' : 'failed', last)
     }
-    const places = new Map(db.untoldDelegations(now).map((d) => [replyKey(d.from, d.originConversationId, d.originThreadId), d]))
+    // In Tucano Auto, one place per request too: a quick one isn't told behind a slow one (see requestOf).
+    const placeKey = (d: Delegation): string => `${replyKey(d.from, d.originConversationId, d.originThreadId)}\u0000${this.autoRequest(d) ?? ''}`
+    const places = new Map(db.untoldDelegations(now).map((d) => [placeKey(d), d]))
     // One waiting on an approval of mine wakes no one: I see it, and approve it, under the asker's message.
     // What came back beside it may be told meanwhile, though (tellAsker doesn't hold answers behind it).
-    for (const d of db.openDelegations()) if (!d.asking && this.onApproval(d)) places.set(replyKey(d.from, d.originConversationId, d.originThreadId), d)
-    for (const d of places.values()) this.tellAsker(d.from, d.originConversationId, d.originThreadId, now)
+    for (const d of db.openDelegations()) if (!d.asking && this.onApproval(d)) places.set(placeKey(d), d)
+    for (const d of places.values()) this.tellAsker(d, now)
   }
 
   // The reply an open request should have ended with: the newest one by whoever does it, since it was

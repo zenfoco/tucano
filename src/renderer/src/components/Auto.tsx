@@ -15,7 +15,6 @@ import {
   inboxCount,
   isMine,
   isTeam,
-  messageById,
   navigate,
   openPanel,
   workingOn,
@@ -283,8 +282,8 @@ function Said({ message, onWho }: { message: Message; onWho: (id: string) => voi
   return <Theirs message={message} onWho={onWho} />
 }
 
-// Where the Tuca handed work to the team: one quiet line while it's done, the approvals it stopped on,
-// and the files it made. What it found, he says himself when it comes back.
+// Where the Tuca handed work to the team: one quiet line while it's done and the approvals it stopped on.
+// What it found, and the files it made, come on his own delivery (Theirs), when it comes back.
 function TeamWork({ message, onWho }: { message: Message; onWho: (id: string) => void }): ReactNode {
   const ids = message.run?.delegations?.map((d) => d.id) ?? []
   const asked = useStore((s) => s.delegations.filter((d) => ids.includes(d.id)))
@@ -292,10 +291,6 @@ function TeamWork({ message, onWho }: { message: Message; onWho: (id: string) =>
     const held = new Set(asked.flatMap((d) => (d.approval ? [d.approval] : [])))
     const list = s.approvals.filter((a) => a.state === 'pending' && held.has(a.id))
     return list.length ? list : NO_APPROVALS
-  })
-  const files = useStore((s) => {
-    const list = asked.flatMap((d) => (d.result ? (messageById(s, d.result)?.run?.artifactIds ?? []) : []))
-    return list.length ? [...new Set(list)] : NO_FILES
   })
   const open = asked.some((d) => d.state === 'open')
   return (
@@ -312,17 +307,9 @@ function TeamWork({ message, onWho }: { message: Message; onWho: (id: string) =>
           <ApprovalCard approval={a} />
         </div>
       ))}
-      {files.length > 0 && (
-        <div className="artifacts auto-files">
-          {files.map((id) => (
-            <ArtifactCard key={id} id={id} />
-          ))}
-        </div>
-      )}
     </div>
   )
 }
-const NO_FILES: string[] = []
 
 function Theirs({ message, onWho }: { message: Message; onWho: (id: string) => void }): ReactNode {
   const text = useLiveText(message, message.run?.status === 'working' ? 120 : 0)

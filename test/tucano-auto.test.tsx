@@ -24,8 +24,8 @@ const biaDm: Conversation = { id: 'c2', kind: 'dm', name: 'bia', members: ['bia'
 const ask: Message = { id: 'm1', conversationId: 'c1', author: { kind: 'person', id: 'me' }, text: 'Um cardápio para receber amigos', at: 1 }
 // The Tuca hands it to Bia (a reply with no text of its own), and delivers when it comes back.
 const handing: Message = { id: 'm2', conversationId: 'c1', author: { kind: 'agent', id: 'tuca' }, text: '', at: 2, run: { status: 'done', steps: [], endedAt: 2, delegations: [{ id: 'd1', to: 'bia', conversationId: 'c2', rootId: 'r1' }] } }
-const reply: Message = { id: 'm3', conversationId: 'c1', author: { kind: 'agent', id: 'tuca' }, text: 'Que tal uma moqueca?', at: 3, run: { status: 'done', steps: [], endedAt: 4 } }
-const biaAnswer: Message = { id: 'm4', conversationId: 'c2', author: { kind: 'agent', id: 'bia' }, text: 'Moqueca, farofa e pudim.', at: 3, threadId: 'r1', run: { status: 'done', steps: [], endedAt: 3, artifactIds: ['f1'] } }
+const reply: Message = { id: 'm3', conversationId: 'c1', author: { kind: 'agent', id: 'tuca' }, text: 'Que tal uma moqueca?', at: 3, run: { status: 'done', steps: [], endedAt: 4, artifactIds: ['f1'] } }
+const biaAnswer: Message = { id: 'm4', conversationId: 'c2', author: { kind: 'agent', id: 'bia' }, text: 'Moqueca, farofa e pudim.', at: 3, threadId: 'r1', run: { status: 'done', steps: [], endedAt: 3 } }
 const asked: Delegation = { id: 'd1', from: 'tuca', to: 'bia', conversationId: 'c2', rootId: 'r1', originConversationId: 'c1', originMessageId: 'm2', requestedBy: 'me', text: 'monte um cardápio para receber amigos', state: 'done', result: 'm4', createdAt: 2 }
 
 const drawn = (): string => renderToStaticMarkup(<AutoMode />)
@@ -48,6 +48,14 @@ describe('Tucano Auto', () => {
     expect(chat(html)).not.toContain('Bia')
     expect(chat(html)).not.toContain('Moqueca, farofa e pudim.')
     expect(html).toContain('Modo completo')
+  })
+
+  it('shows the files on the Tuca\'s delivery, once, with no delegation or team messages to look them up in', () => {
+    fake = { ...fake, delegations: [], messages: { c1: [ask, handing, reply] } }
+    const html = chat(drawn())
+    expect(html).toContain('cardapio.pdf')
+    // One file card (its name shows twice inside it): the files live only on his delivery.
+    expect(html.split('auto-files').length - 1).toBe(1)
   })
 
   it('keeps what the Tuca asked of whom in the backstage', () => {

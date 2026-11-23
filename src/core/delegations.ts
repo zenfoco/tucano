@@ -13,6 +13,7 @@ import { describeAgent } from './router'
 
 export const MAX_DELEGATIONS_PER_REPLY = 5
 export const MAX_OPEN_DELEGATIONS = 12 // per asker, everywhere
+export const AUTO_RESULT_MAX = 32_000 // Tucano Auto: the person sees only the Tuca, so what he delivers can't be pointed at a thread
 const RESULT_MAX = 8_000 // what goes back to the asker's conversation; the thread keeps it whole
 const TEXT_MAX = 6_000
 const DONE_MAX = 600
@@ -185,8 +186,17 @@ export function teammateNote(what: 'done' | 'asked', to: string, text: string): 
     : L(`[A divisão do trabalho ganhou mais uma parte: ${to} vai fazer ${text.replace(/\s+/g, ' ').trim().slice(0, 300)}. Não faça essa parte.]`, `[The split of the work got one more part: ${to} will do ${text.replace(/\s+/g, ' ').trim().slice(0, 300)}. Don't do that part.]`)
 }
 
-const cut = (text: string): string =>
-  text.length <= RESULT_MAX ? text : `${text.slice(0, RESULT_MAX)}\n\n${L(`[… cortado: o resto está na thread do pedido, ${text.length - RESULT_MAX} caracteres a mais]`, `[… cut: the rest is in the request's thread, ${text.length - RESULT_MAX} more characters]`)}`
+// `auto`: Tucano Auto, where the person has no thread to open: a higher cap, and the note tells the Tuca
+// how to get the rest from whoever did the work (pedir with "continuar") instead of pointing at the thread.
+type AutoCut = { code: string; me: string }
+const cut = (text: string, auto?: AutoCut): string => {
+  if (auto) {
+    if (text.length <= AUTO_RESULT_MAX) return text
+    const n = text.length - AUTO_RESULT_MAX
+    return `${text.slice(0, AUTO_RESULT_MAX)}\n\n${L(`[… cortado: ${n} caracteres a mais ficaram com quem fez. Para o resto, peça com pedir e "continuar" ${auto.code}; entregue a ${auto.me} o que já chegou, sem mandar abrir nada.]`, `[… cut: ${n} more characters stayed with whoever did it. For the rest, ask with pedir and "continuar" ${auto.code}; deliver to ${auto.me} what has already come, without sending them to open anything.]`)}`
+  }
+  return text.length <= RESULT_MAX ? text : `${text.slice(0, RESULT_MAX)}\n\n${L(`[… cortado: o resto está na thread do pedido, ${text.length - RESULT_MAX} caracteres a mais]`, `[… cut: the rest is in the request's thread, ${text.length - RESULT_MAX} more characters]`)}`
+}
 
 // Where a request was delivered, as it's named in a list ("#dados", "DM") and in a sentence ("em #dados", "na DM").
 // A channel when its agent is in one; otherwise the DM its agent has with whoever the work is for.
@@ -205,8 +215,8 @@ export interface Returned {
 }
 
 // What came back, quoted in the asker's task: nothing of it is a message where the asker works.
-const quoted = (text: string): string =>
-  cut(text.trim())
+const quoted = (text: string, auto?: AutoCut): string =>
+  cut(text.trim(), auto)
     .split('\n')
     .map((l) => `  > ${l}`)
     .join('\n')
@@ -216,12 +226,14 @@ const quoted = (text: string): string =>
 export function returnTask(returned: Returned[], open: { d: Delegation; to: string; channel: string; parked?: boolean }[], me: string, auto = false): string {
   const line = (r: Returned): string => {
     const head = `- [${codeOf(r.d)}] ${r.to}, ${r.channel}`
+    const cap = auto ? { code: codeOf(r.d), me } : undefined
+    if (r.what === 'done' && auto && !r.text?.trim()) return `${head}: ${L('terminou sem resposta em texto (os arquivos seguem com a sua resposta)', 'finished with no text answer (the files come with your reply)')}.`
     if (r.what === 'done')
-      return `${head}: ${L('terminou. O que respondeu', 'finished. What they answered')}${r.text?.trim() ? `:\n${quoted(r.text)}` : ` ${L('está na thread do pedido', 'is in the request\'s thread')}.`}`
+      return `${head}: ${L('terminou. O que respondeu', 'finished. What they answered')}${r.text?.trim() ? `:\n${quoted(r.text, cap)}` : ` ${L('está na thread do pedido', 'is in the request\'s thread')}.`}`
     if (r.what === 'failed')
       return `${head}: ${L(
-        `não terminou${r.why ? ` (${r.why.replace(/[.\s]+$/, '')})` : ''}${r.text?.trim() ? `. O que ficou pronto:\n${quoted(r.text)}\n` : '. '}Decida você o caminho: passe pra outro agente que faz a mesma coisa, faça de outro jeito, ou, se só ${me} resolve (um login, o limite do mês, uma decisão), leve a ${me} numa pergunta só, com a sua recomendação`,
-        `did not finish${r.why ? ` (${r.why.replace(/[.\s]+$/, '')})` : ''}${r.text?.trim() ? `. What got done:\n${quoted(r.text)}\n` : '. '}Decide the way yourself: hand it to another agent who does the same, do it another way, or, if only ${me} can solve it (a sign-in, the month's limit, a decision), take it to ${me} in one question, with your recommendation`
+        `não terminou${r.why ? ` (${r.why.replace(/[.\s]+$/, '')})` : ''}${r.text?.trim() ? `. O que ficou pronto:\n${quoted(r.text, cap)}\n` : '. '}Decida você o caminho: passe pra outro agente que faz a mesma coisa, faça de outro jeito, ou, se só ${me} resolve (um login, o limite do mês, uma decisão), leve a ${me} numa pergunta só, com a sua recomendação`,
+        `did not finish${r.why ? ` (${r.why.replace(/[.\s]+$/, '')})` : ''}${r.text?.trim() ? `. What got done:\n${quoted(r.text, cap)}\n` : '. '}Decide the way yourself: hand it to another agent who does the same, do it another way, or, if only ${me} can solve it (a sign-in, the month's limit, a decision), take it to ${me} in one question, with your recommendation`
       )}.`
     if (r.what === 'cancelled') return `${head}: ${L('foi parado antes de terminar', 'was stopped before it finished')}.`
     if (r.what === 'late') return `${head}: ${L(`passou do prazo e ainda não terminou. Diga a ${me}; pra desistir, use cancelar_pedido`, `is past its deadline and has not finished. Tell ${me}; to give up, use cancelar_pedido`)}.`

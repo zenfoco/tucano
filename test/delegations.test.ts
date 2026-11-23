@@ -11,6 +11,7 @@ import { Gateway } from '../src/core/gateway'
 import { Runner } from '../src/core/runs'
 import { exportTeam, importTeam } from '../src/core/team'
 import { People } from '../src/core/people'
+import { AUTO_RESULT_MAX, codeOf, returnTask, type Returned } from '../src/core/delegations'
 
 const ready = { installed: true, loggedIn: true }
 const agent = (id: string, extra: Partial<Agent> = {}): Agent => ({ id, name: id[0]!.toUpperCase() + id.slice(1), handle: id, role: '', color: 'sky', instructions: '', modelId: 'sonnet', effort: 'low', limit: 1_000_000, used: 0, grants: {}, memory: 'auto', computer: false, archived: false, ...extra })
@@ -922,3 +923,25 @@ describe('work handed on for a restricted member', () => {
   })
 })
 
+describe('what comes back to the asker, long', () => {
+  const d = { id: 'abcdef123456', from: 'tuca', to: 'clara', conversationId: 'c', rootId: 'r', originConversationId: 'o', originMessageId: 'm', requestedBy: 'p', text: 'x', state: 'done', createdAt: 1 } as Parameters<typeof codeOf>[0] & Returned['d']
+  const back = (text: string | undefined): Returned[] => [{ d, to: 'Clara', channel: 'DM', what: 'done', ...(text ? { text } : {}) }]
+
+  it('in Tucano Auto keeps up to 32,000 characters and says how to get the rest, not where the thread is', () => {
+    const task = returnTask(back('a'.repeat(40_000)), [], 'Edu', true)
+    expect(task.match(/a+/g)!.sort((x, y) => y.length - x.length)[0]!.length).toBe(AUTO_RESULT_MAX)
+    expect(task).toContain(`[… cortado: 8000 caracteres a mais ficaram com quem fez. Para o resto, peça com pedir e "continuar" ${codeOf(d)}`)
+    expect(task).not.toContain('thread do pedido')
+  })
+
+  it('out of it keeps 8,000 and the note it always had', () => {
+    const task = returnTask(back('a'.repeat(40_000)), [], 'Edu')
+    expect(task.match(/a+/g)!.sort((x, y) => y.length - x.length)[0]!.length).toBe(8_000)
+    expect(task).toContain('o resto está na thread do pedido, 32000 caracteres a mais')
+  })
+
+  it('in Tucano Auto a result with no text says the files come with his reply', () => {
+    expect(returnTask(back(undefined), [], 'Edu', true)).toContain('terminou sem resposta em texto (os arquivos seguem com a sua resposta)')
+    expect(returnTask(back(undefined), [], 'Edu')).toContain('está na thread do pedido')
+  })
+})
