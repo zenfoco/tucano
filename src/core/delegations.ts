@@ -266,8 +266,9 @@ export function returnTask(returned: Returned[], open: { d: Delegation; to: stri
 // The asker's view of whom it may hand work to, for the live context: who answers to it and who answers
 // to the same agent as it does, what each does and reaches, the channels each works in (with their
 // topic: where a subject belongs) and what is still open.
-export function teamSection(opts: { agent: Agent; agents: Agent[]; conversations: Conversation[]; connectors: Connector[]; open: Delegation[]; ended?: Delegation[]; me: string }): string | undefined {
-  const { agent, agents, conversations, connectors, open, ended = [], me } = opts
+// `zen`: the Tuca in Tucano Zen, for whom the team is who he calls on complex tasks, not on small ones.
+export function teamSection(opts: { agent: Agent; agents: Agent[]; conversations: Conversation[]; connectors: Connector[]; open: Delegation[]; ended?: Delegation[]; me: string; zen?: boolean }): string | undefined {
+  const { agent, agents, conversations, connectors, open, ended = [], me, zen = false } = opts
   const team = reportsOf(agents, agent.id)
   const boss = bossOf(agents, agent)
   const heads = headsOf(agents)
@@ -367,7 +368,10 @@ export function teamSection(opts: { agent: Agent; agents: Agent[]; conversations
       )}\n${back.map((d) => `- [${codeOf(d)}] ${name(d.to)}, ${channel(d.conversationId)}, ${d.state === 'done' ? L('terminou', 'finished') : d.state === 'failed' ? L('não terminou', 'did not finish') : L('foi parado', 'was stopped')}: ${d.text.replace(/\s+/g, ' ').slice(0, 140)}`).join('\n')}`
     : ''
   const rest = others.length
-    ? `${L(
+    ? `${zen ? L(
+        `## A equipe\nOs especialistas que você chama nas tarefas complexas, cada parte pro da área dela. O que é simples, você responde sem chamar ninguém.`,
+        `## The team\nThe specialists you call on complex tasks, each part to the one whose field it is. What is simple, you answer without calling anyone.`
+      ) : L(
         `## Outros agentes\nFora do seu caminho no organograma, mas ninguém é cercado: uma pergunta ou uma parte pequena que é do trabalho de um deles, peça direto com pedir. Trabalho grande de outro setor, prefira o chefe dele.`,
         `## Other agents\nOut of your way in the org chart, but no one is fenced in: a question or a small part that is one of theirs to do, ask them directly with pedir. For a big job of another sector, prefer its head.`
       )}\n${others.map((a) => row(a, false)).join('\n')}`

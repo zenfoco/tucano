@@ -1634,9 +1634,13 @@ export class Runner {
     // And when this reply is itself such work (in the thread a request opened), whose request it is:
     // what it asks goes up to that one, and what it ends with goes back to where that one asked.
     // The tree no longer fences anyone in: any agent may ask any other (anyoneOf), nearest first.
-    const team = this.deps.gateway ? agentsFor(requester, anyoneOf(db.agents(), agent.id)) : [] // a restricted person's agent hands work only to what they see
     const handed = this.handedIn(msg)
     const boss = handed ? db.agent(handed.from) : undefined
+    // Tucano Zen: a part the Tuca handed out is that agent's alone. He split the request and gave each
+    // part to its specialist, so the one doing it hands nothing on (the others are on theirs already);
+    // what blocks it still goes up to him with ask_user.
+    const zenPart = !!handed && boss?.kind === 'tuca' && this.autoDm(handed.originConversationId)
+    const team = this.deps.gateway && !zenPart ? agentsFor(requester, anyoneOf(db.agents(), agent.id)) : [] // a restricted person's agent hands work only to what they see
     const delegated: DelegationRef[] = []
     let handedOn = 0 // requests handed on in this reply that weren't asked before on the job: the work moving on
     let answeredUp = false // answered a question its team left on a request: nothing in that for the person
@@ -3050,7 +3054,7 @@ ${note}`,
       github,
       people,
       orchestrator: agent.kind === 'tuca' && this.autoDm(conv.id) ? autoOrchestratorSection(settings.workspaceName) : undefined,
-      team: team.length ? teamSection({ agent, agents: agentsFor(requester, db.agents(), agent.id), conversations: db.conversations().filter((c) => sees.canSeeConversation(requester, c)), connectors: this.deps.connectors?.list() ?? [], open: db.openDelegations(), ended: db.delegationsFrom(agent.id, conv.id, this.originThread(msg)), me: settings.workspaceName }) : undefined,
+      team: team.length ? teamSection({ agent, agents: agentsFor(requester, db.agents(), agent.id), conversations: db.conversations().filter((c) => sees.canSeeConversation(requester, c)), connectors: this.deps.connectors?.list() ?? [], open: db.openDelegations(), ended: db.delegationsFrom(agent.id, conv.id, this.originThread(msg)), me: settings.workspaceName, zen: agent.kind === 'tuca' && this.autoDm(conv.id) }) : undefined,
       builder: proposes
         ? builderSection(settings, { models: this.deps.models?.() ?? availableModels(settings), connectors: this.deps.connectors?.list() ?? [], team: agentsFor(requester, db.agents()).filter((a) => !a.archived && a.kind !== 'tuca'), own: agent.modelId })
         : undefined,

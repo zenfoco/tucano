@@ -90,6 +90,9 @@ describe('the Tuca in Tucano Zen', () => {
     await r.idle()
     const [first, back] = tucaTurns()
     expect(first!.system + first!.prompt).toContain('Tucano Zen: você é o único que fala com Edu')
+    // His team list is for complex tasks: not the full app's "ask them a small part directly".
+    expect(first!.system + first!.prompt).toContain('## A equipe\nOs especialistas que você chama nas tarefas complexas')
+    expect(first!.system + first!.prompt).not.toContain('## Outros agentes')
     // Clara did it in her DM, and it came back to him with the wording that delivers the work itself.
     const d = db.delegationsFrom('tuca', 'tdm', undefined)[0]!
     expect(d).toMatchObject({ to: 'clara', state: 'done', told: true, originConversationId: 'tdm' })
@@ -100,6 +103,15 @@ describe('the Tuca in Tucano Zen', () => {
     const his = db.messages().filter((m) => m.conversationId === 'tdm' && m.author.kind === 'agent')
     expect(his.length).toBe(2)
     expect(his.every((m) => !m.threadId)).toBe(true)
+  })
+
+  it("keeps a part he handed out with its specialist: Clara does hers, and hands nothing on", async () => {
+    db.setSettings({ auto: true })
+    const r = runner()
+    await r.send('tdm', 'responda o Fulano')
+    await r.idle()
+    const clara = claude.turns.find((t) => t.prompt.includes('um pedido de Tuca'))!
+    expect(clara.system + clara.prompt).not.toMatch(/## (Outros agentes|Seu time|Other agents|Your team)/)
   })
 
   it('stays the Tuca he always was with the mode off', async () => {
