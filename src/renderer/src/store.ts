@@ -708,6 +708,9 @@ const stillThere = (view: View | undefined, s: Pick<State, 'conversations' | 'ag
 
 export async function start(): Promise<void> {
   window.tucano.onNavigate((id, thread) => {
+    // In Tucano Auto the Tuca delivers what the team did: a notice of the team's work doesn't take the
+    // person out of the mode (they get it from him), only the window comes to the front.
+    if (state.settings.auto === true) return
     navigate({ kind: 'conversation', id })
     if (thread) openThread(thread)
   })
@@ -896,8 +899,9 @@ export const navigate = (view: View): void => {
   // Tucano Auto shows only its conversation and the builder: anything else asked for (a link, a
   // notification, a card) is shown in the full app, which the mode then gives way to.
   const auto = state.settings.auto === true
-  const autoChannel = state.conversations.find((c) => c.kind === 'channel' && c.name === AUTO_CHANNEL_NAME)
-  if (auto && view.kind !== 'tuca' && !(view.kind === 'conversation' && view.id === autoChannel?.id && !view.message)) updateSettings({ auto: false })
+  const tuca = state.agents.find((a) => a.kind === 'tuca' && !a.archived)
+  const autoDm = tuca && state.conversations.find((c) => c.kind === 'dm' && c.name === tuca.id)
+  if (auto && view.kind !== 'tuca' && !(view.kind === 'conversation' && view.id === autoDm?.id && !view.message)) updateSettings({ auto: false })
   set((s) => ({
     ...s,
     view,
@@ -907,8 +911,6 @@ export const navigate = (view: View): void => {
       view.kind === 'conversation' ? s.conversations.map((c) => (c.id === view.id ? { ...c, unread: 0 } : c)) : s.conversations
   }))
 }
-// Tucano Auto's channel (components/Auto.tsx), by its name.
-export const AUTO_CHANNEL_NAME = 'tucano-auto'
 
 export function updateSettings(patch: Partial<Omit<Settings, 'engines'>>): void {
   // optimistic, so typing stays instant; the owner's name given here (the introduction) is the name asked once

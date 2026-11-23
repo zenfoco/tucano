@@ -17434,3 +17434,26 @@ button.agent-card__now:hover {
   border: 0;
   background: transparent;
 }
+.auto-team {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-2);
+  padding: 4px 2px;
+}
+.auto-team .auto-who {
+  display: inline;
+  margin: 0;
+}
+.auto-team__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ok);
+}
+.auto-team__dot.is-working {
+  background: var(--accent);
+  animation: auto-blink 1.1s steps(2, jump-none) infinite;
+}

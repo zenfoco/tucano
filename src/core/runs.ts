@@ -22,7 +22,7 @@ import { BUSCAR_NA_WEB, formatResults, LER_PAGINA, readPage, searchWeb, WEB_TOOL
 import { AGENDAR, CANCELAR, outcome, ROUTINE_TOOL_NAMES, whenText, type Routines } from './routines'
 import { noNewsPhrase, noNewsRun } from '../shared/routine-news'
 import { LER_SKILL, PROPOR_SKILL, SKILL_TOOL_NAMES, type Skills } from './skills'
-import { availableModels, builderGuide, builderSection, draftFrom, helperSection, PROPOR_AGENTE, PROPOR_TIME, teamFrom } from './tuca'
+import { autoOrchestratorSection, availableModels, builderGuide, builderSection, draftFrom, helperSection, PROPOR_AGENTE, PROPOR_TIME, teamFrom } from './tuca'
 import { appliesNow, decidedCards, keepDecided } from './tuca-apply'
 import { LER_GUIA, readGuide } from './guide'
 import { feedbackFrom, pendingAgents, PROPOR_FEEDBACK, proposalFrom, PROPOSAL_TOOLS, VER_ESTADO, workspaceState } from './tuca-help'
@@ -3042,6 +3042,7 @@ ${note}`,
       connectors: exposed.size > 0,
       github,
       people,
+      orchestrator: agent.kind === 'tuca' && this.autoDm(conv.id) ? autoOrchestratorSection(settings.workspaceName) : undefined,
       team: team.length ? teamSection({ agent, agents: agentsFor(requester, db.agents(), agent.id), conversations: db.conversations().filter((c) => sees.canSeeConversation(requester, c)), connectors: this.deps.connectors?.list() ?? [], open: db.openDelegations(), ended: db.delegationsFrom(agent.id, conv.id, this.originThread(msg)), me: settings.workspaceName }) : undefined,
       builder: proposes
         ? builderSection(settings, { models: this.deps.models?.() ?? availableModels(settings), connectors: this.deps.connectors?.list() ?? [], team: agentsFor(requester, db.agents()).filter((a) => !a.archived && a.kind !== 'tuca'), own: agent.modelId })
@@ -4176,8 +4177,22 @@ ${note}`,
 
   // Where what a reply hands on comes back: its own thread; out of one, the thread of the person's message
   // it answers, so the answer lands under what the person asked and not as one more line of the conversation.
+  // Tucano Auto (components/Auto.tsx): this conversation is a person's DM with the Tuca, and that
+  // person has the mode on (the owner's in the settings, anyone else's in their own preferences).
+  autoDm(conversationId: string): boolean {
+    const db = this.deps.db
+    const c = db.conversation(conversationId)
+    if (!c || c.kind !== 'dm' || db.agent(c.name)?.kind !== 'tuca') return false
+    const person = dmOwner(c, db.ownerId())
+    const auto = person === db.ownerId() ? db.getSettings({} as Omit<Settings, 'engines'>).auto : person ? db.prefs(person).auto : undefined
+    return auto === true
+  }
+
   private originThread(reply: Pick<Message, 'threadId' | 'conversationId' | 'run'>): string | undefined {
     if (reply.threadId) return reply.threadId
+    // In Tucano Auto the Tuca's DM stays one conversation: what he hands on, and what he delivers when it
+    // comes back, stay in it, where he reads them on the next request (a thread's inside he wouldn't).
+    if (this.autoDm(reply.conversationId)) return undefined
     const asked = reply.run?.replyTo ? this.deps.db.message(reply.run.replyTo) : undefined
     return asked && asked.conversationId === reply.conversationId && !asked.threadId && asked.author.kind === 'person' ? asked.id : undefined
   }
@@ -4318,7 +4333,7 @@ ${note}`,
       const requester = behalf ?? requesterOf(db, conv, [], threadId)
       const me = requester.id === db.ownerId() ? undefined : requester.name
       this.followups.reserve(key)
-      this.enqueue(async () => this.execute(agent, conv, { depth: 1, threadId, task: returnTask(returned, open.map((d) => ({ ...place(d), parked: this.onApproval(d) })), me ?? (await this.deps.settings()).workspaceName), reserved: true, ...(behalf ? { for: behalf } : {}), ...(jobId ? { job: jobId } : {}) }), true, agent)
+      this.enqueue(async () => this.execute(agent, conv, { depth: 1, threadId, task: returnTask(returned, open.map((d) => ({ ...place(d), parked: this.onApproval(d) })), me ?? (await this.deps.settings()).workspaceName, agent.kind === 'tuca' && this.autoDm(conv.id)), reserved: true, ...(behalf ? { for: behalf } : {}), ...(jobId ? { job: jobId } : {}) }), true, agent)
     }
     if (this.followups.busy(key)) this.tells.set(key, go)
     else go()

@@ -212,7 +212,8 @@ const quoted = (text: string): string =>
     .join('\n')
 
 // What the asker is told when it gets the turn back: each thing that came back, by its code, and what to do with it.
-export function returnTask(returned: Returned[], open: { d: Delegation; to: string; channel: string; parked?: boolean }[], me: string): string {
+// `auto`: the Tuca in Tucano Auto, the only one the person sees: he delivers the work itself.
+export function returnTask(returned: Returned[], open: { d: Delegation; to: string; channel: string; parked?: boolean }[], me: string, auto = false): string {
   const line = (r: Returned): string => {
     const head = `- [${codeOf(r.d)}] ${r.to}, ${r.channel}`
     if (r.what === 'done')
@@ -234,7 +235,16 @@ export function returnTask(returned: Returned[], open: { d: Delegation; to: stri
   const still = open.length ? `\n\n${L('Ainda em andamento', 'Still going')}: ${open.map((o) => `[${codeOf(o.d)}] ${o.to}, ${o.channel}${o.parked ? ` (${L(`parado numa aprovação que espera ${me}, que ${me} vê embaixo da sua mensagem`, `held on an approval that waits for ${me}, which ${me} sees under your message`)})` : ''}`).join('; ')}.` : ''
   const close = returned.some((r) => r.what === 'asking')
     ? ''
-    : `\n\n${L(
+    : auto
+      ? `\n\n${L(
+          open.length
+            ? `Diga a ${me} o que já ficou pronto, entregue isso por inteiro, e o que ainda está andando, sem dizer quem faz.`
+            : `Entregue a ${me} o trabalho pronto e completo, na sua voz: o resultado em si (texto, tabela, código, links), não um resumo dele, e o que precisa de decisão. ${me} não vê o time nem as threads dos pedidos: não mande abrir nada nem conte quem fez o quê. Se falta ${me} escolher algo, pergunte com ask_user (com as opções).`,
+          open.length
+            ? `Tell ${me} what is ready, delivering it in full, and what is still going, without saying who does it.`
+            : `Deliver to ${me} the finished work in full, in your own voice: the result itself (text, table, code, links), not a summary of it, and what needs a decision. ${me} doesn't see the team nor the requests' threads: don't send them to open anything nor tell who did what. If ${me} has to choose something, ask with ask_user (with the options).`
+        )}`
+      : `\n\n${L(
         `${open.length ? `Diga a ${me} o que já voltou, em poucas linhas, e o que ainda está andando.` : `Feche o assunto com ${me}: diga o resultado em poucas linhas, com o que importa de cada resposta, e o que precisa de decisão. Não copie as respostas inteiras: cada uma fica na thread do pedido, que ${me} abre pela linha embaixo da sua mensagem. Se falta ${me} escolher algo pra você seguir, pergunte com ask_user (com as opções), não no texto.`}`,
         `${open.length ? `Tell ${me} what has come back, in a few lines, and what is still going.` : `Close the subject with ${me}: say the result in a few lines, with what matters from each answer, and what needs a decision. Do not copy the answers whole: each stays in the request's thread, which ${me} opens from the line under your message. If ${me} has to choose something for you to go on, ask with ask_user (with the options), not in the text.`}`
       )}`

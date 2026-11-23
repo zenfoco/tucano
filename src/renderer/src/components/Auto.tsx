@@ -1,34 +1,34 @@
-// Tucano Auto: the whole app as one conversation with the toucan. The person writes in one
-// field and the team answers behind it: the router picks who (src/core/router.ts), in a channel
-// of its own that has every agent of the team. Who did what, what the team knows about the person,
-// and the routines wait in a drawer ("Bastidores") that only opens when asked. Approvals and
-// questions come in the conversation, as the same cards as everywhere else. "Modo completo" goes
-// back to the app as it always is.
+// Tucano Auto: the whole app as one conversation with the Tuca. The person writes in one field,
+// in their DM with him, and he is the only one who answers: what needs a specialist he hands to the
+// team with `pedir` and delivers when it comes back (src/core/tuca.ts autoOrchestratorSection). What
+// he asked of whom, what the team knows about the person and the routines wait in a drawer
+// ("Bastidores") that only opens when asked. Approvals and questions come in the conversation, as
+// the same cards as everywhere else. "Modo completo" goes back to the app as it always is.
 import { L } from '../../../shared/lang'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { hasOpenSteps, questionsOf } from '../../../shared/questions'
 import {
-  canEditChannel,
   decideMemory,
+  ensureTuca,
   forgetMemory,
   getState,
-  AUTO_CHANNEL_NAME,
   inboxCount,
   isMine,
   isTeam,
+  messageById,
   navigate,
   openPanel,
   workingOn,
-  newChannel,
   runRoutine,
   sendMessage,
-  setChannelMembers,
   stopRun,
   timelineOf,
   toast,
   updateSettings,
   useLiveText,
   useStore,
+  type Approval,
+  type Delegation,
   type Message,
   type State
 } from '../store'
@@ -39,31 +39,37 @@ import { AnswersSummary, NextStepsCard } from './Decisions'
 import { describeRoutine } from './Routines'
 import { Icon, TucaMark, time, useJustEnded } from './ui'
 
-// The channel behind the mode: found by its name, made the first time.
-export const AUTO_CHANNEL = AUTO_CHANNEL_NAME
-const autoChannel = (s: State) => s.conversations.find((c) => c.kind === 'channel' && c.name === AUTO_CHANNEL)
-
-// The channel, with every agent of the team in it so the router can pick any of them. Made once;
-// an agent created later joins it the next time the mode opens.
-let making: Promise<void> | null = null
-function ensureAutoChannel(): Promise<void> {
-  if (making) return making
-  making = (async () => {
-    const s = getState()
-    const team = s.agents.filter(isTeam).map((a) => a.id)
-    const conv = autoChannel(s)
-    if (!conv) {
-      const id = await newChannel(AUTO_CHANNEL)
-      if (team.length) await setChannelMembers(id, team)
-      return
-    }
-    const missing = team.filter((id) => !conv.members.includes(id))
-    if (missing.length && canEditChannel(s, conv)) await setChannelMembers(conv.id, [...conv.members, ...missing])
-  })()
-    .catch(() => toast(L('Não consegui preparar a conversa do Tucano Auto.', "I couldn't set up the Tucano Auto conversation.")))
-    .finally(() => (making = null))
-  return making
+// The Tuca, and this person's DM with him: the conversation behind the mode.
+const tucaOf = (s: State) => s.agents.find((a) => a.kind === 'tuca' && !a.archived)
+export const autoConversation = (s: State) => {
+  const tuca = tucaOf(s)
+  return tuca ? s.conversations.find((c) => c.kind === 'dm' && c.name === tuca.id) : undefined
 }
+
+// The Tuca and his DM, made if missing (never fresh: that would delete what was said there).
+let making: Promise<unknown> | null = null
+function ensureAutoConversation(): void {
+  if (making || autoConversation(getState())) return
+  making = ensureTuca()
+    .catch(() => toast(L('Não consegui abrir a conversa com o Tuca.', "I couldn't open the conversation with the Tuca.")))
+    .finally(() => (making = null))
+}
+
+// What the Tuca handed to the team from this conversation, newest last (the store keeps the open ones
+// and those that ended in the last day).
+const handedFrom = (s: State, conversationId: string | undefined): Delegation[] => {
+  const tuca = tucaOf(s)
+  return conversationId && tuca ? s.delegations.filter((d) => d.from === tuca.id && d.originConversationId === conversationId) : NO_DELEGATIONS
+}
+const NO_DELEGATIONS: Delegation[] = []
+// Pending approvals the person sees here: this conversation's, and those the team's work stopped on.
+const approvalsHere = (s: State, conversationId: string | undefined): Approval[] => {
+  if (!conversationId) return NO_APPROVALS
+  const held = new Set(handedFrom(s, conversationId).flatMap((d) => (d.approval ? [d.approval] : [])))
+  const list = s.approvals.filter((a) => a.state === 'pending' && (a.conversationId === conversationId || held.has(a.id)))
+  return list.length ? list : NO_APPROVALS
+}
+const NO_APPROVALS: Approval[] = []
 
 // Leaves the mode, to the app as it always is (on a message, when there's one to look at).
 export function leaveAuto(conversationId?: string, message?: string): void {
@@ -73,43 +79,42 @@ export function leaveAuto(conversationId?: string, message?: string): void {
   if (panel) openPanel(panel) // a file asked to be opened here opens beside the conversation there
 }
 
-// The router's own line ("Chamei **Bia** · …", "Ninguém precisa responder", "Escolhendo quem responde…"):
-// backstage. Its failure, a stop with Continuar and the rest of what the app says stay in the conversation.
-const ROUTER_LINE = /^(Chamei |Called |Ninguém precisa responder|No one needs to answer|Escolhendo quem responde|Picking who answers)/
-export const routerLine = (m: Message): boolean => m.author.kind === 'system' && !m.stop && ROUTER_LINE.test(m.text)
+// A reply of the Tuca's that only handed work on: no text of its own, its requests on it.
+const handingOn = (m: Message): boolean => m.author.kind === 'agent' && !!m.run?.delegations?.length && !m.text.trim() && m.run.status !== 'working'
 
 type Tab = 'trail' | 'memory' | 'routines'
 
 export function AutoMode(): ReactNode {
-  const conv = useStore(autoChannel)
+  const conv = useStore(autoConversation)
   const teamSize = useStore((s) => s.agents.filter(isTeam).length)
+  const handed = useStore((s) => handedFrom(s, conv?.id))
   const name = useStore((s) => s.me.name)
   const paused = useStore((s) => !!s.settings.paused)
   const theme = useStore((s) => s.settings.theme)
   const timeline = useStore((s) => (conv ? timelineOf(s, conv.id) : NONE))
-  const approvals = useStore((s) => (conv ? s.approvals.filter((a) => a.conversationId === conv.id && a.state === 'pending').length : 0))
+  const approvals = useStore((s) => approvalsHere(s, conv?.id).length)
   const [open, setOpen] = useState(false)
   const [tab, setTab] = useState<Tab>('trail')
   const [focus, setFocus] = useState<string | undefined>()
   const [opening, setOpening] = useState(() => typeof matchMedia === 'function' && !matchMedia('(prefers-reduced-motion: reduce)').matches)
 
-  useEffect(() => void ensureAutoChannel(), [teamSize])
+  useEffect(() => ensureAutoConversation(), [conv])
   // A file or a thread asked to open (its card was clicked): that side panel is the full app's.
   const panel = useStore((s) => s.panel)
   useEffect(() => {
     if (panel && conv) leaveAuto(conv.id)
   }, [panel, conv])
   // What waits on me elsewhere: approvals and questions from other conversations.
-  const elsewhere = useStore((s) => Math.max(0, inboxCount(s) - (conv ? s.approvals.filter((a) => a.conversationId === conv.id && a.state === 'pending').length : 0)))
+  const elsewhere = useStore((s) => Math.max(0, inboxCount(s) - approvalsHere(s, conv?.id).length))
   useEffect(() => {
     if (!opening) return
     const t = setTimeout(() => setOpening(false), 2300)
     return () => clearTimeout(t)
   }, [opening])
 
-  // What the person sees: what they asked and what came back. The router's notes go to the trail.
-  const shown = useMemo(() => timeline.filter((m) => !routerLine(m)), [timeline])
-  const working = timeline.some((m) => m.run?.status === 'working')
+  // What the person sees: what they asked and what the Tuca said. While the team works, he's working.
+  const shown = timeline
+  const working = timeline.some((m) => m.run?.status === 'working') || handed.some((d) => d.state === 'open')
   const done = useJustEnded(working, 1600)
 
   const say = paused
@@ -118,8 +123,8 @@ export function AutoMode(): ReactNode {
       ? L('Preciso do seu sim para seguir.', 'I need your yes to go on.')
       : working
         ? L('Cuidando disso…', 'On it…')
-        : teamSize === 0
-          ? L('Sua equipe ainda está vazia. Monte a equipe no modo completo.', 'Your team is still empty. Build it in the full mode.')
+        : teamSize === 0 && !shown.length
+          ? L(`Oi, ${name}! Sua equipe ainda está vazia: me conte o que você quer resolver e eu monto quem cuida disso.`, `Hi, ${name}! Your team is still empty: tell me what you want to get done and I'll set up who takes care of it.`)
           : shown.length
             ? L('Pronto. O que mais?', 'Done. What else?')
             : L(`Oi, ${name}! O que você quer resolver?`, `Hi, ${name}! What do you want to get done?`)
@@ -186,7 +191,7 @@ export function AutoMode(): ReactNode {
 
         <AutoChat messages={shown} onWho={showWho} />
 
-        <AutoComposer conversationId={conv?.id} disabled={!conv || teamSize === 0} />
+        <AutoComposer conversationId={conv?.id} disabled={!conv} />
       </div>
 
       <aside className="auto-backstage" id="auto-backstage" aria-label={L('Bastidores', 'Backstage')} aria-hidden={!open}>
@@ -210,7 +215,7 @@ export function AutoMode(): ReactNode {
             </button>
           ))}
         </div>
-        {tab === 'trail' && <Trail timeline={timeline} focus={focus} conversationId={conv?.id} />}
+        {tab === 'trail' && <Trail timeline={timeline} handed={handed} focus={focus} conversationId={conv?.id} />}
         {tab === 'memory' && <WhatIKnow />}
         {tab === 'routines' && <AutoRoutines />}
       </aside>
@@ -267,8 +272,50 @@ function Said({ message, onWho }: { message: Message; onWho: (id: string) => voi
         <ReplyText text={message.text} />
       </div>
     )
+  if (handingOn(message)) return <TeamWork message={message} onWho={onWho} />
   return <Theirs message={message} onWho={onWho} />
 }
+
+// Where the Tuca handed work to the team: one quiet line while it's done, the approvals it stopped on,
+// and the files it made. What it found, he says himself when it comes back.
+function TeamWork({ message, onWho }: { message: Message; onWho: (id: string) => void }): ReactNode {
+  const ids = message.run?.delegations?.map((d) => d.id) ?? []
+  const asked = useStore((s) => s.delegations.filter((d) => ids.includes(d.id)))
+  const approvals = useStore((s) => {
+    const held = new Set(asked.flatMap((d) => (d.approval ? [d.approval] : [])))
+    const list = s.approvals.filter((a) => a.state === 'pending' && held.has(a.id))
+    return list.length ? list : NO_APPROVALS
+  })
+  const files = useStore((s) => {
+    const list = asked.flatMap((d) => (d.result ? (messageById(s, d.result)?.run?.artifactIds ?? []) : []))
+    return list.length ? [...new Set(list)] : NO_FILES
+  })
+  const open = asked.some((d) => d.state === 'open')
+  return (
+    <div className="auto-row">
+      <div className="auto-team">
+        <span className={`auto-team__dot ${open ? 'is-working' : ''}`} aria-hidden="true" />
+        {open ? L('A equipe está cuidando disso. Já te entrego.', "The team is on it. I'll deliver it shortly.") : L('A equipe terminou.', 'The team is done.')}
+        <button className="auto-who" type="button" onClick={() => onWho(message.id)}>
+          {L('quem está fazendo?', "who's doing it?")}
+        </button>
+      </div>
+      {approvals.map((a) => (
+        <div key={a.id} className="auto-approve">
+          <ApprovalCard approval={a} />
+        </div>
+      ))}
+      {files.length > 0 && (
+        <div className="artifacts auto-files">
+          {files.map((id) => (
+            <ArtifactCard key={id} id={id} />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+const NO_FILES: string[] = []
 
 function Theirs({ message, onWho }: { message: Message; onWho: (id: string) => void }): ReactNode {
   const text = useLiveText(message, message.run?.status === 'working' ? 120 : 0)
@@ -326,7 +373,7 @@ function AutoComposer({ conversationId, disabled }: { conversationId: string | u
   const [text, setText] = useState('')
   const [note, setNote] = useState('')
   const field = useRef<HTMLInputElement>(null)
-  const [dictation, controls] = useDictation((t) => setText((v) => (v ? `${v} ${t}` : t)), setNote, conversationId ?? AUTO_CHANNEL)
+  const [dictation, controls] = useDictation((t) => setText((v) => (v ? `${v} ${t}` : t)), setNote, conversationId ?? 'tucano-auto')
   const send = (): void => {
     const t = text.trim()
     if (!t || !conversationId || disabled) return
@@ -363,64 +410,50 @@ function AutoComposer({ conversationId, disabled }: { conversationId: string | u
 }
 
 // Each request, newest first: who the router called and why, and how each reply went.
-function Trail({ timeline, focus, conversationId }: { timeline: Message[]; focus: string | undefined; conversationId: string | undefined }): ReactNode {
+function Trail({ timeline, handed, focus, conversationId }: { timeline: Message[]; handed: Delegation[]; focus: string | undefined; conversationId: string | undefined }): ReactNode {
   const agents = useStore((s) => s.agents)
   const blocks = useMemo(() => {
-    const out: { ask: Message; notes: Message[]; replies: Message[] }[] = []
-    const byId = new Map<string, (typeof out)[number]>()
+    const out: { ask: Message; replies: Message[]; asked: Delegation[] }[] = []
     for (const m of timeline) {
-      if (m.author.kind === 'person') {
-        const block = { ask: m, notes: [], replies: [] }
-        out.push(block)
-        byId.set(m.id, block)
-        continue
-      }
-      // A reply says which message it answers; the rest goes with the last ask before it.
-      const block = (m.run?.replyTo && byId.get(m.run.replyTo)) || out.at(-1)
-      if (block) (m.author.kind === 'system' ? block.notes : block.replies).push(m)
+      if (m.author.kind === 'person') out.push({ ask: m, replies: [], asked: [] })
+      else if (m.author.kind === 'agent' && out.length) out.at(-1)!.replies.push(m)
+    }
+    for (const b of out) {
+      const ids = new Set(b.replies.map((r) => r.id))
+      b.asked = handed.filter((d) => ids.has(d.originMessageId))
     }
     return out.reverse()
-  }, [timeline])
+  }, [timeline, handed])
   const lit = useRef<HTMLLIElement>(null)
   // Braces: scrollIntoView returns a promise in newer Chromium, and an effect may return only its cleanup.
   useEffect(() => {
     lit.current?.scrollIntoView({ block: 'nearest' })
   }, [focus])
   if (!blocks.length) return <p className="auto-quiet">{L('Nada ainda. Mande um pedido.', 'Nothing yet. Send a request.')}</p>
+  const nameOf = (id: string): string => agents.find((a) => a.id === id)?.name ?? L('Agente', 'Agent')
+  const roleOf = (id: string): string => agents.find((a) => a.id === id)?.role ?? ''
   return (
     <ul className="auto-trail">
-      {blocks.map(({ ask, notes, replies }) => {
+      {blocks.map(({ ask, replies, asked }) => {
         const here = !!focus && replies.some((r) => r.id === focus)
         return (
           <li key={ask.id} className={`auto-trail__block ${here ? 'is-lit' : ''}`} ref={here ? lit : undefined}>
             <div className="auto-trail__ask">
               “{ask.text.length > 90 ? `${ask.text.slice(0, 90)}…` : ask.text}”<small>{time(ask.at)}</small>
             </div>
-            {notes.map((n) => (
-              <div key={n.id} className="auto-trail__step">
-                <ReplyText text={n.text} />
+            {asked.length === 0 && replies.length > 0 && <div className="auto-trail__step">{L('O Tuca respondeu direto.', 'The Tuca answered himself.')}</div>}
+            {asked.map((d) => (
+              <div key={d.id} className="auto-trail__step">
+                <b>{nameOf(d.to)}</b>
+                {roleOf(d.to) ? ` · ${roleOf(d.to)}` : ''}
+                <small>
+                  “{d.text.length > 80 ? `${d.text.slice(0, 80)}…` : d.text}” · {handedWords(d)}
+                </small>
+                <button className="auto-link" type="button" onClick={() => leaveAuto(d.conversationId, d.rootId)}>
+                  {L('Ver o trabalho no modo completo', 'See the work in the full mode')}
+                </button>
               </div>
             ))}
-            {replies.map((r) => {
-              const author = r.author
-              const who = author.kind === 'agent' ? agents.find((a) => a.id === author.id) : undefined
-              const steps = r.run?.steps.length ?? 0
-              return (
-                <div key={r.id} className="auto-trail__step">
-                  <b>{who?.name ?? (r.author.kind === 'routine' ? L('Rotina', 'Routine') : L('Agente', 'Agent'))}</b>
-                  {who?.role ? ` · ${who.role}` : ''}
-                  <small>
-                    {runWords(r)}
-                    {steps ? ` · ${steps} ${steps === 1 ? L('passo', 'step') : L('passos', 'steps')}` : ''}
-                  </small>
-                </div>
-              )
-            })}
-            {conversationId && (
-              <button className="auto-link" type="button" onClick={() => leaveAuto(conversationId, ask.id)}>
-                {L('Ver tudo no modo completo', 'See it all in the full mode')}
-              </button>
-            )}
           </li>
         )
       })}
@@ -428,20 +461,19 @@ function Trail({ timeline, focus, conversationId }: { timeline: Message[]; focus
   )
 }
 
-const runWords = (m: Message): string => {
-  switch (m.run?.status) {
-    case 'working':
-      return L('trabalhando agora', 'working now')
-    case 'failed':
-      return L('não conseguiu', "didn't manage")
-    case 'waiting_input':
-      return L('esperando você', 'waiting for you')
-    case undefined:
-      return time(m.at)
-    default:
-      return L(`respondeu às ${time(m.run?.endedAt ?? m.at)}`, `answered at ${time(m.run?.endedAt ?? m.at)}`)
-  }
-}
+const handedWords = (d: Delegation): string =>
+  d.state === 'open'
+    ? d.asking
+      ? L('perguntou algo', 'asked something')
+      : d.approval
+        ? L('esperando uma aprovação', 'waiting for an approval')
+        : L('trabalhando', 'working')
+    : d.state === 'done'
+      ? L('entregou', 'delivered')
+      : d.state === 'failed'
+        ? L('não conseguiu', "didn't manage")
+        : L('cancelado', 'cancelled')
+
 
 function WhatIKnow(): ReactNode {
   const memories = useStore((s) => s.memories)
