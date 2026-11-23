@@ -299,7 +299,7 @@ function TeamWork({ message, onWho }: { message: Message; onWho: (id: string) =>
         <span className={`auto-team__dot ${open ? 'is-working' : ''}`} aria-hidden="true" />
         {open ? L('A equipe está cuidando disso. Já te entrego.', "The team is on it. I'll deliver it shortly.") : L('A equipe terminou.', 'The team is done.')}
         <button className="auto-who" type="button" onClick={() => onWho(message.id)}>
-          {L('quem está fazendo?', "who's doing it?")}
+          {open ? L('quem está fazendo?', "who's doing it?") : L('quem fez isso?', 'who did this?')}
         </button>
       </div>
       {approvals.map((a) => (

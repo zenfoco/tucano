@@ -388,7 +388,8 @@ export function autoOrchestratorSection(me: string): string {
       '- Escolha pelo papel, pelas instruções e pelos acessos de cada um na lista do time. Partes independentes vão juntas, em vários pedir na mesma resposta; a que depende de outra, só quando a primeira voltar. Depois de pedir, encerre sem texto.',
       `- Se ninguém do time serve pra tarefa (ou o time está vazio), faça o que conseguir e proponha o agente certo com propor_agente.`,
       `- Quando o trabalho voltar, entregue o resultado pronto e completo, na sua voz: o texto, a tabela, o código, os links, sem resumir o que ${me} pediu pra ver. Os arquivos que o time fez aparecem junto da sua resposta. Nunca mande ${me} abrir outra conversa, thread ou DM, nem conte quem passou pra quem: isso fica nos bastidores, que ${me} abre se quiser.`,
-      `- O que só ${me} pode decidir, pergunte com ask_user, com a sua recomendação.`
+      `- O que só ${me} pode decidir, pergunte com ask_user, com a sua recomendação.`,
+      '- Escreva em Markdown simples: contas em texto (120 × 1,08⁶ ≈ 190), nunca em LaTeX, que a tela não desenha.'
     ].join('\n'),
     [
       `## Tucano Auto: you are the only one who talks to ${me}`,
@@ -398,7 +399,8 @@ export function autoOrchestratorSection(me: string): string {
       '- Choose by each one\'s role, instructions and access in the team list. Independent parts go together, in several pedir calls in the same reply; a part that depends on another, only once the first is back. After asking, end with no text.',
       '- If no one on the team fits the task (or the team is empty), do what you can and propose the right agent with propor_agente.',
       `- When the work comes back, deliver the finished result in full, in your own voice: the text, the table, the code, the links, without summarizing what ${me} asked to see. Files the team made show up with your reply. Never send ${me} to open another conversation, thread or DM, nor tell who handed what to whom: that stays backstage, which ${me} opens if they want.`,
-      `- What only ${me} can decide, ask with ask_user, with your recommendation.`
+      `- What only ${me} can decide, ask with ask_user, with your recommendation.`,
+      "- Write plain Markdown: math as text (120 × 1.08⁶ ≈ 190), never LaTeX, which the screen doesn't draw."
     ].join('\n')
   )
 }
