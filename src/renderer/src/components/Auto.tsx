@@ -12,8 +12,13 @@ import {
   decideMemory,
   forgetMemory,
   getState,
+  AUTO_CHANNEL_NAME,
+  inboxCount,
+  isMine,
   isTeam,
   navigate,
+  openPanel,
+  workingOn,
   newChannel,
   runRoutine,
   sendMessage,
@@ -27,13 +32,15 @@ import {
   type Message,
   type State
 } from '../store'
-import { ApprovalCard, QuestionCard, ReplyText, useDictation, VoiceButton } from './Conversation'
+import { ApprovalCard, QuestionCard, ReplyText, StopNote, useDictation, VoiceButton } from './Conversation'
+import { ArtifactCard } from './Panel'
+import { Proposals } from './Tuca'
 import { AnswersSummary, NextStepsCard } from './Decisions'
 import { describeRoutine } from './Routines'
 import { Icon, TucaMark, time, useJustEnded } from './ui'
 
 // The channel behind the mode: found by its name, made the first time.
-export const AUTO_CHANNEL = 'tucano-auto'
+export const AUTO_CHANNEL = AUTO_CHANNEL_NAME
 const autoChannel = (s: State) => s.conversations.find((c) => c.kind === 'channel' && c.name === AUTO_CHANNEL)
 
 // The channel, with every agent of the team in it so the router can pick any of them. Made once;
@@ -60,9 +67,16 @@ function ensureAutoChannel(): Promise<void> {
 
 // Leaves the mode, to the app as it always is (on a message, when there's one to look at).
 export function leaveAuto(conversationId?: string, message?: string): void {
+  const panel = getState().panel
   updateSettings({ auto: false })
   if (conversationId) navigate({ kind: 'conversation', id: conversationId, ...(message ? { message } : {}) })
+  if (panel) openPanel(panel) // a file asked to be opened here opens beside the conversation there
 }
+
+// The router's own line ("Chamei **Bia** · …", "Ninguém precisa responder", "Escolhendo quem responde…"):
+// backstage. Its failure, a stop with Continuar and the rest of what the app says stay in the conversation.
+const ROUTER_LINE = /^(Chamei |Called |Ninguém precisa responder|No one needs to answer|Escolhendo quem responde|Picking who answers)/
+export const routerLine = (m: Message): boolean => m.author.kind === 'system' && !m.stop && ROUTER_LINE.test(m.text)
 
 type Tab = 'trail' | 'memory' | 'routines'
 
@@ -80,6 +94,13 @@ export function AutoMode(): ReactNode {
   const [opening, setOpening] = useState(() => typeof matchMedia === 'function' && !matchMedia('(prefers-reduced-motion: reduce)').matches)
 
   useEffect(() => void ensureAutoChannel(), [teamSize])
+  // A file or a thread asked to open (its card was clicked): that side panel is the full app's.
+  const panel = useStore((s) => s.panel)
+  useEffect(() => {
+    if (panel && conv) leaveAuto(conv.id)
+  }, [panel, conv])
+  // What waits on me elsewhere: approvals and questions from other conversations.
+  const elsewhere = useStore((s) => Math.max(0, inboxCount(s) - (conv ? s.approvals.filter((a) => a.conversationId === conv.id && a.state === 'pending').length : 0)))
   useEffect(() => {
     if (!opening) return
     const t = setTimeout(() => setOpening(false), 2300)
@@ -87,7 +108,7 @@ export function AutoMode(): ReactNode {
   }, [opening])
 
   // What the person sees: what they asked and what came back. The router's notes go to the trail.
-  const shown = useMemo(() => timeline.filter((m) => m.author.kind !== 'system'), [timeline])
+  const shown = useMemo(() => timeline.filter((m) => !routerLine(m)), [timeline])
   const working = timeline.some((m) => m.run?.status === 'working')
   const done = useJustEnded(working, 1600)
 
@@ -130,6 +151,11 @@ export function AutoMode(): ReactNode {
           <div className="auto-balloon">
             <div>{say}</div>
             <div className="auto-balloon__status">{status}</div>
+            {elsewhere > 0 && (
+              <button className="auto-link" type="button" onClick={() => navigate({ kind: 'approvals' })}>
+                {L(`${elsewhere} ${elsewhere === 1 ? 'coisa espera' : 'coisas esperam'} você fora daqui`, `${elsewhere} ${elsewhere === 1 ? 'thing waits' : 'things wait'} for you elsewhere`)}
+              </button>
+            )}
           </div>
         </section>
 
@@ -186,7 +212,7 @@ export function AutoMode(): ReactNode {
         </div>
         {tab === 'trail' && <Trail timeline={timeline} focus={focus} conversationId={conv?.id} />}
         {tab === 'memory' && <WhatIKnow />}
-        {tab === 'routines' && <AutoRoutines working={timeline.filter((m) => m.run?.status === 'working').map((m) => m.id)} />}
+        {tab === 'routines' && <AutoRoutines />}
       </aside>
     </div>
   )
@@ -220,17 +246,28 @@ function AutoChat({ messages, onWho }: { messages: Message[]; onWho: (id: string
       }}
     >
       {messages.length === 0 && <p className="auto-empty">{L('Escreva o que você precisa, do seu jeito. Ninguém aqui precisa de comando.', 'Write what you need, your own way. Nothing here needs a command.')}</p>}
-      {messages.map((m) => (m.author.kind === 'person' ? <Mine key={m.id} message={m} /> : <Theirs key={m.id} message={m} onWho={onWho} />))}
+      {messages.map((m) => <Said key={m.id} message={m} onWho={onWho} />)}
     </section>
   )
 }
 
-function Mine({ message }: { message: Message }): ReactNode {
-  return (
-    <div className="auto-msg auto-msg--me">
-      <ReplyText text={message.text} />
-    </div>
-  )
+function Said({ message, onWho }: { message: Message; onWho: (id: string) => void }): ReactNode {
+  const mine = useStore((s) => isMine(s, message.author))
+  if (message.author.kind === 'system')
+    return message.stop ? (
+      <StopNote message={message} />
+    ) : (
+      <div className="auto-system">
+        <ReplyText text={message.text} />
+      </div>
+    )
+  if (mine)
+    return (
+      <div className="auto-msg auto-msg--me">
+        <ReplyText text={message.text} />
+      </div>
+    )
+  return <Theirs message={message} onWho={onWho} />
 }
 
 function Theirs({ message, onWho }: { message: Message; onWho: (id: string) => void }): ReactNode {
@@ -247,7 +284,15 @@ function Theirs({ message, onWho }: { message: Message; onWho: (id: string) => v
         </span>
         <div className="auto-msg__body">
           {text ? <ReplyText text={text} /> : working ? <span className="auto-dots" aria-label={L('escrevendo', 'writing')} /> : null}
-          {run?.status === 'failed' && run.error && <p className="auto-msg__error">{run.error}</p>}
+          {run?.error && <p className="auto-msg__error">{run.error}</p>}
+          {run?.status === 'stopped' && <p className="auto-msg__error">{L('Interrompido por você.', 'Stopped by you.')}</p>}
+          {!!run?.artifactIds?.length && (
+            <div className="artifacts auto-files">
+              {run.artifactIds.map((id) => (
+                <ArtifactCard key={id} id={id} />
+              ))}
+            </div>
+          )}
           {run && questionsOf(run).length > 0 &&
             (hasOpenSteps(run) ? (
               <NextStepsCard message={message} />
@@ -263,6 +308,11 @@ function Theirs({ message, onWho }: { message: Message; onWho: (id: string) => v
           )}
         </div>
       </div>
+      {(run?.agentDraft || !!run?.proposals?.length || !!run?.proposal) && (
+        <div className="auto-approve">
+          <Proposals message={message} />
+        </div>
+      )}
       {approval?.state === 'pending' && (
         <div className="auto-approve">
           <ApprovalCard approval={approval} />
@@ -317,9 +367,17 @@ function Trail({ timeline, focus, conversationId }: { timeline: Message[]; focus
   const agents = useStore((s) => s.agents)
   const blocks = useMemo(() => {
     const out: { ask: Message; notes: Message[]; replies: Message[] }[] = []
+    const byId = new Map<string, (typeof out)[number]>()
     for (const m of timeline) {
-      if (m.author.kind === 'person') out.push({ ask: m, notes: [], replies: [] })
-      else if (out.length) (m.author.kind === 'system' ? out.at(-1)!.notes : out.at(-1)!.replies).push(m)
+      if (m.author.kind === 'person') {
+        const block = { ask: m, notes: [], replies: [] }
+        out.push(block)
+        byId.set(m.id, block)
+        continue
+      }
+      // A reply says which message it answers; the rest goes with the last ask before it.
+      const block = (m.run?.replyTo && byId.get(m.run.replyTo)) || out.at(-1)
+      if (block) (m.author.kind === 'system' ? block.notes : block.replies).push(m)
     }
     return out.reverse()
   }, [timeline])
@@ -423,7 +481,7 @@ function WhatIKnow(): ReactNode {
   )
 }
 
-function AutoRoutines({ working }: { working: string[] }): ReactNode {
+function AutoRoutines(): ReactNode {
   const routines = useStore((s) => s.routines)
   const paused = useStore((s) => !!s.settings.paused)
   const agents = useStore((s) => s.agents)
@@ -439,7 +497,13 @@ function AutoRoutines({ working }: { working: string[] }): ReactNode {
             {r.enabled ? '' : ` · ${L('desligada', 'off')}`}
           </small>
           <div className="auto-note__acts">
-            <button type="button" onClick={() => runRoutine(r.id)}>
+            <button
+              type="button"
+              onClick={() => {
+                runRoutine(r.id)
+                toast(L(`Rodando “${r.name}”. A resposta fica na conversa da rotina.`, `Running “${r.name}”. The answer goes in the routine's conversation.`), { label: L('Ver', 'See'), run: () => navigate({ kind: 'conversation', id: r.conversationId }) })
+              }}
+            >
               {L('Rodar agora', 'Run now')}
             </button>
           </div>
@@ -456,7 +520,7 @@ function AutoRoutines({ working }: { working: string[] }): ReactNode {
           title={L('Para o que está rodando, e nenhum agente começa nem rotina roda até retomar', "Stops what's running, and no agent starts nor routine runs until you resume")}
           onClick={() => {
             updateSettings({ paused: true })
-            for (const id of working) stopRun(id)
+            for (const m of workingOn(getState()).values()) stopRun(m.id)
           }}
         >
           ■ {L('Pare tudo', 'Stop everything')}

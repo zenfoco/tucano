@@ -17410,3 +17410,27 @@ button.agent-card__now:hover {
     transition: none !important;
   }
 }
+.auto-system {
+  align-self: center;
+  max-width: 85%;
+  font-size: 13px;
+  color: var(--text-3);
+  text-align: center;
+}
+.auto-system p {
+  margin: 0;
+}
+.auto-files {
+  margin-top: 8px;
+}
+.auto-balloon .auto-link {
+  display: block;
+}
+/* the pill already shows focus (its border): no ring of the app's fields inside it */
+.auto-field input:focus,
+.auto-field input:focus-visible {
+  outline: none;
+  box-shadow: none;
+  border: 0;
+  background: transparent;
+}

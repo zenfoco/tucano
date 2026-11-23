@@ -892,7 +892,12 @@ function fire<M extends Method>(failed: string, method: M, ...params: Params<M> 
 
 export const setNav = (navOpen: boolean): void => set((s) => ({ ...s, navOpen }))
 
-export const navigate = (view: View): void =>
+export const navigate = (view: View): void => {
+  // Tucano Auto shows only its conversation and the builder: anything else asked for (a link, a
+  // notification, a card) is shown in the full app, which the mode then gives way to.
+  const auto = state.settings.auto === true
+  const autoChannel = state.conversations.find((c) => c.kind === 'channel' && c.name === AUTO_CHANNEL_NAME)
+  if (auto && view.kind !== 'tuca' && !(view.kind === 'conversation' && view.id === autoChannel?.id && !view.message)) updateSettings({ auto: false })
   set((s) => ({
     ...s,
     view,
@@ -901,6 +906,9 @@ export const navigate = (view: View): void =>
     conversations:
       view.kind === 'conversation' ? s.conversations.map((c) => (c.id === view.id ? { ...c, unread: 0 } : c)) : s.conversations
   }))
+}
+// Tucano Auto's channel (components/Auto.tsx), by its name.
+export const AUTO_CHANNEL_NAME = 'tucano-auto'
 
 export function updateSettings(patch: Partial<Omit<Settings, 'engines'>>): void {
   // optimistic, so typing stays instant; the owner's name given here (the introduction) is the name asked once

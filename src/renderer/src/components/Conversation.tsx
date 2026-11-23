@@ -1022,7 +1022,7 @@ function DecidedApproval({ approval }: { approval: Approval }): ReactNode {
 
 // Where a piece of work stopped on its brakes: why, what got done, where it stopped, and Continuar. Once
 // someone goes on, the core drops `stop` and the note says who did.
-function StopNote({ message }: { message: Message }): ReactNode {
+export function StopNote({ message }: { message: Message }): ReactNode {
   return (
     <div className="system-line system-line--stop" data-id={message.id}>
       <Icon name="spark" size={13} />

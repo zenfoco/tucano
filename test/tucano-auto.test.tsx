@@ -3,7 +3,7 @@
 // backstage. The mode is each person's own, and always has its way back to the full app.
 import { renderToStaticMarkup } from 'react-dom/server'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { Agent, Conversation, Message, Settings } from '../src/shared/types'
+import type { Agent, Approval, Conversation, Message, Settings } from '../src/shared/types'
 import type { State } from '../src/renderer/src/store'
 
 let fake: State
@@ -57,6 +57,33 @@ describe('Tucano Auto', () => {
     expect(html).toMatch(/class="auto-send" type="button" disabled=""/)
   })
 
+  it("keeps the router's pick backstage, but says when it couldn't pick, and keeps a stop with Continuar", () => {
+    const nobody: Message = { id: 'n1', conversationId: 'c1', author: { kind: 'system' }, text: 'Ninguém precisa responder · um agradecimento', at: 5 }
+    const failed: Message = { id: 'n2', conversationId: 'c1', author: { kind: 'system' }, text: 'Não consegui escolher quem responde: sem login. Mencione um agente com **@nome**.', at: 6 }
+    const stop: Message = { id: 'n3', conversationId: 'c1', author: { kind: 'system' }, text: 'Parei no limite desta tarefa.', at: 7, stop: { job: 'j1' } }
+    fake = { ...fake, messages: { c1: [ask, note, reply, nobody, failed, stop] } }
+    const html = chat(drawn())
+    expect(html).not.toContain('Ninguém precisa responder')
+    expect(html).toContain('Não consegui escolher quem responde')
+    expect(html).toContain('Parei no limite desta tarefa.')
+    expect(html).toContain('Continuar')
+  })
+
+  it('asks for the yes in the conversation, as the usual approval card', () => {
+    const approval = { id: 'ap1', hash: 'h', agentId: 'bia', conversationId: 'c1', messageId: 'm3', connectorId: 'gmail', connectorName: 'Gmail', tool: 'send_email', args: { to: 'ana@exemplo.com' }, why: 'mandar o cardápio', highRisk: false, state: 'pending', createdAt: 1, expiresAt: Date.now() + 3_600_000 } as Approval
+    fake = { ...fake, approvals: [approval], messages: { c1: [ask, note, { ...reply, run: { status: 'waiting_approval', steps: [], approvalId: 'ap1' } } as Message] } }
+    const html = drawn()
+    expect(html).toContain('Preciso do seu sim para seguir.')
+    expect(chat(html)).toContain('class="auto-approve"')
+    expect(chat(html)).toContain('ana@exemplo.com')
+  })
+
+  it('shows a question the reply asked, to answer right there', () => {
+    const asked = { ...reply, run: { status: 'waiting_input', steps: [], question: 'Quantas pessoas vêm?' } } as Message
+    fake = { ...fake, messages: { c1: [ask, note, asked] } }
+    expect(chat(drawn())).toContain('Quantas pessoas vêm?')
+  })
+
   it('offers to resume when everything is stopped', () => {
     fake = { ...fake, settings: { ...fake.settings, paused: true } }
     const html = drawn()
@@ -65,6 +92,18 @@ describe('Tucano Auto', () => {
 })
 
 describe('the switch', () => {
+  it('gives way to the full app when something else is asked for, and stays for its own conversation', async () => {
+    const store = await import('../src/renderer/src/store')
+    const set = (auto: boolean): void => store.updateSettings({ auto })
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    set(true)
+    store.navigate({ kind: 'settings' })
+    expect(store.getState().settings.auto).toBe(false)
+    set(true)
+    store.navigate({ kind: 'tuca' })
+    expect(store.getState().settings.auto).toBe(true)
+  })
+
   it('is a setting the app accepts, as a boolean and nothing else', () => {
     expect(settingsPatchError({ auto: true })).toBeUndefined()
     expect(settingsPatchError({ auto: null })).toBeUndefined()
