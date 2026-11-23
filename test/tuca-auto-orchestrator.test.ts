@@ -1,4 +1,4 @@
-// Tucano Auto with the Tuca as the one who talks to the person (src/core/tuca.ts autoOrchestratorSection):
+// Tucano Zen with the Tuca as the one who talks to the person (src/core/tuca.ts autoOrchestratorSection):
 // in his DM he hands the work to the team, and when it comes back he delivers it in the same
 // conversation, not in a thread, where he reads it on the next request. Out of the mode, as always.
 import { mkdtempSync } from 'node:fs'
@@ -82,14 +82,14 @@ beforeEach(async () => {
 
 const tucaTurns = (): { system: string; prompt: string }[] => claude.turns.filter((t) => t.system.includes('Você é Tuca'))
 
-describe('the Tuca in Tucano Auto', () => {
+describe('the Tuca in Tucano Zen', () => {
   it('is told he is the only one who talks to the person, hands the work on and delivers it in the conversation itself', async () => {
     db.setSettings({ auto: true })
     const r = runner()
     await r.send('tdm', 'responda o Fulano')
     await r.idle()
     const [first, back] = tucaTurns()
-    expect(first!.system + first!.prompt).toContain('Tucano Auto: você é o único que fala com Edu')
+    expect(first!.system + first!.prompt).toContain('Tucano Zen: você é o único que fala com Edu')
     // Clara did it in her DM, and it came back to him with the wording that delivers the work itself.
     const d = db.delegationsFrom('tuca', 'tdm', undefined)[0]!
     expect(d).toMatchObject({ to: 'clara', state: 'done', told: true, originConversationId: 'tdm' })
@@ -107,7 +107,7 @@ describe('the Tuca in Tucano Auto', () => {
     await r.send('tdm', 'responda o Fulano')
     await r.idle()
     const [first, back] = tucaTurns()
-    expect(first!.system + first!.prompt).not.toContain('Tucano Auto')
+    expect(first!.system + first!.prompt).not.toContain('Tucano Zen')
     expect(back!.prompt).toContain('Não copie as respostas inteiras')
     const his = db.messages().filter((m) => m.conversationId === 'tdm' && m.author.kind === 'agent')
     expect(his.every((m) => !!m.threadId)).toBe(true)

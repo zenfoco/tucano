@@ -189,10 +189,10 @@ export function WorkspaceMenu(): ReactNode {
             <span className="grow">{paused ? L('Retomar o time', 'Resume the team') : L('Pausar o time', 'Pause the team')}</span>
           </button>
         )}
-        {/* Tucano Auto (components/Auto.tsx): one conversation, the team behind it. Its own screen has the way back. */}
+        {/* Tucano Zen (components/Auto.tsx): one conversation, the team behind it. Its own screen has the way back. */}
         <button className="menu__item" role="menuitem" onClick={pick(() => updateSettings({ auto: true }))}>
           <Icon name="zap" size={15} />
-          <span className="grow">Tucano Auto</span>
+          <span className="grow">Tucano Zen</span>
         </button>
         <button className="menu__item" role="menuitem" onClick={pick(() => updateSettings({ theme: isDark ? 'light' : 'dark' }))}>
           <Icon name={isDark ? 'sun' : 'moon'} size={15} />

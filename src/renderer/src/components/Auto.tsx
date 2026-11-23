@@ -1,4 +1,4 @@
-// Tucano Auto: the whole app as one conversation with the Tuca. The person writes in one field,
+// Tucano Zen: the whole app as one conversation with the Tuca. The person writes in one field,
 // in their DM with him, and he is the only one who answers: what needs a specialist he hands to the
 // team with `pedir` and delivers when it comes back (src/core/tuca.ts autoOrchestratorSection). What
 // he asked of whom, what the team knows about the person and the routines wait in a drawer
@@ -168,7 +168,7 @@ export function AutoMode(): ReactNode {
         <header className="auto-head">
           <div className="auto-brand">
             <TucaMark size={22} />
-            <span>Tucano Auto</span>
+            <span>Tucano Zen</span>
             <small>{L('Você pede; a equipe encontra o caminho.', 'You ask; the team finds the way.')}</small>
           </div>
           <div className="auto-tools">

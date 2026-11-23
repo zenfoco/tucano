@@ -708,7 +708,7 @@ const stillThere = (view: View | undefined, s: Pick<State, 'conversations' | 'ag
 
 export async function start(): Promise<void> {
   window.tucano.onNavigate((id, thread) => {
-    // In Tucano Auto the Tuca delivers what the team did: a notice of the team's work doesn't take the
+    // In Tucano Zen the Tuca delivers what the team did: a notice of the team's work doesn't take the
     // person out of the mode (they get it from him), only the window comes to the front.
     if (state.settings.auto === true) return
     navigate({ kind: 'conversation', id })
@@ -896,7 +896,7 @@ function fire<M extends Method>(failed: string, method: M, ...params: Params<M> 
 export const setNav = (navOpen: boolean): void => set((s) => ({ ...s, navOpen }))
 
 export const navigate = (view: View): void => {
-  // Tucano Auto shows only its conversation and the builder: anything else asked for (a link, a
+  // Tucano Zen shows only its conversation and the builder: anything else asked for (a link, a
   // notification, a card) is shown in the full app, which the mode then gives way to.
   const auto = state.settings.auto === true
   const tuca = state.agents.find((a) => a.kind === 'tuca' && !a.archived)

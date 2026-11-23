@@ -57,7 +57,7 @@ export function App(): ReactNode {
   useEffect(() => {
     const keys = (e: KeyboardEvent): void => {
       const mod = mac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey
-      // In Tucano Auto the screens these go to aren't there: the keys stay the page's own.
+      // In Tucano Zen the screens these go to aren't there: the keys stay the page's own.
       if (!mod || e.altKey || intro || guest || auto) return
       const s = getState()
       const channels = s.conversations.filter((c) => c.kind === 'channel')
@@ -89,7 +89,7 @@ export function App(): ReactNode {
         <CoreDown />
       </>
     )
-  // Tucano Auto: one conversation, the team behind it (components/Auto.tsx). The builder screen
+  // Tucano Zen: one conversation, the team behind it (components/Auto.tsx). The builder screen
   // still opens over it, since building the team is where the mode sends an empty one.
   if (auto && view.kind !== 'tuca')
     return (

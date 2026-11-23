@@ -412,7 +412,7 @@ export interface RoutineEvent {
 // waited its turn, isn't what it answers (another reply is, or it was merged in, see `waiting`).
 // `replyTo`: the message a person wrote that this reply answers (a mention's, a DM's), kept on its run.
 // `routineAsk`: on a routine's run, the message the routine posted (the reply keeps it, so the conversation shows them together).
-type ReplyOpts = { depth: number; job?: string; autoContinued?: number; existing?: Message; task?: string; work?: string; routine?: boolean; routineAsk?: string; threadId?: string; trigger?: string; replyTo?: string; for?: Person; handed?: string; artifacts?: string[] } // artifacts: Tucano Auto, files the team made, carried on the Tuca's delivery; for: whom it's for, when it isn't read from the conversation (an answer back)
+type ReplyOpts = { depth: number; job?: string; autoContinued?: number; existing?: Message; task?: string; work?: string; routine?: boolean; routineAsk?: string; threadId?: string; trigger?: string; replyTo?: string; for?: Person; handed?: string; artifacts?: string[] } // artifacts: Tucano Zen, files the team made, carried on the Tuca's delivery; for: whom it's for, when it isn't read from the conversation (an answer back)
 
 // What a person wrote into a reply that was already running (`send` with mode 'steer'): the agent
 // reads it with its next tool result, and the reply's own chain carries it, in their words, from the
@@ -471,7 +471,7 @@ export class Runner {
   // agent is still replying there starts when that reply ends (it reads what that reply said).
   private waiting = new Map<string, { trigger: string; queued: boolean; start: () => void }>()
   // What came back from an agent's team while it was replying where it asked: told when that reply ends.
-  // Tucano Auto: by request too (a person's requests in the one DM each have their own delivery), '' elsewhere.
+  // Tucano Zen: by request too (a person's requests in the one DM each have their own delivery), '' elsewhere.
   private tells = new Map<string, Map<string, () => void>>()
   // What waits for the agent to finish there: a prompt the person marked as queued, and what goes on
   // with a reply the person is already reading there (an approval's outcome, a question's refusal, a
@@ -1477,7 +1477,7 @@ export class Runner {
     // How many times it already tried again by itself, after something that passes (waitToRetry).
     const retries = opts.existing?.run?.retries
     const again = { ...(task ? { task } : {}), ...(handedId ? { handed: handedId } : {}), ...(autoContinued ? { autoContinued } : {}), ...(retries ? { retries } : {}) }
-    // Tucano Auto: the files the team made travel on the Tuca's delivery, from its first saved run on, so a
+    // Tucano Zen: the files the team made travel on the Tuca's delivery, from its first saved run on, so a
     // delivery that is stopped or fails still shows them. Not in `again`: later saves spread it over `base`.
     const carried = [...new Set(opts.artifacts ?? [])]
     const withCarried = carried.length ? { artifactIds: carried } : {}
@@ -4184,7 +4184,7 @@ ${note}`,
 
   // Where what a reply hands on comes back: its own thread; out of one, the thread of the person's message
   // it answers, so the answer lands under what the person asked and not as one more line of the conversation.
-  // Tucano Auto (components/Auto.tsx): this conversation is a person's DM with the Tuca, and that
+  // Tucano Zen (components/Auto.tsx): this conversation is a person's DM with the Tuca, and that
   // person has the mode on (the owner's in the settings, anyone else's in their own preferences).
   autoDm(conversationId: string): boolean {
     const db = this.deps.db
@@ -4197,7 +4197,7 @@ ${note}`,
 
   private originThread(reply: Pick<Message, 'threadId' | 'conversationId' | 'run'>): string | undefined {
     if (reply.threadId) return reply.threadId
-    // In Tucano Auto the Tuca's DM stays one conversation: what he hands on, and what he delivers when it
+    // In Tucano Zen the Tuca's DM stays one conversation: what he hands on, and what he delivers when it
     // comes back, stay in it, where he reads them on the next request (a thread's inside he wouldn't).
     if (this.autoDm(reply.conversationId)) return undefined
     const asked = reply.run?.replyTo ? this.deps.db.message(reply.run.replyTo) : undefined
@@ -4297,7 +4297,7 @@ ${note}`,
     return this.lastOf(d)?.run?.status === 'waiting_approval'
   }
 
-  // Tucano Auto: the person's requests share the one DM, so each request (its job) is told on its own:
+  // Tucano Zen: the person's requests share the one DM, so each request (its job) is told on its own:
   // `d` says which one. Out of Auto, `d` only says where.
   private tellAsker(d0: Delegation, now = Date.now()): void {
     const { db } = this.deps
@@ -4345,7 +4345,7 @@ ${note}`,
       const behalf = first && (shared ? { ...first, access: shared } : first)
       const requester = behalf ?? requesterOf(db, conv, [], threadId)
       const me = requester.id === db.ownerId() ? undefined : requester.name
-      // Tucano Auto: the person sees only the Tuca, so the files the team made go on his delivery, where
+      // Tucano Zen: the person sees only the Tuca, so the files the team made go on his delivery, where
       // they show (what the person may see: not a file from a conversation of someone else's).
       const artifacts = agent.kind === 'tuca' && this.autoDm(conv.id) ? this.filesOf(returned, requester) : []
       this.followups.reserve(key)
@@ -4373,14 +4373,14 @@ ${note}`,
     })
   }
 
-  // Tucano Auto: what tells one request of the person's from another in the Tuca's DM (originThreadId is
+  // Tucano Zen: what tells one request of the person's from another in the Tuca's DM (originThreadId is
   // undefined for all of them there): the job its message belongs to. Undefined elsewhere, where the thread tells.
   private autoRequest(d: Pick<Delegation, 'originConversationId' | 'originThreadId' | 'originMessageId'>): string | undefined {
     if (d.originThreadId || !this.autoDm(d.originConversationId)) return undefined
     return this.deps.db.message(d.originMessageId)?.run?.job ?? d.originMessageId
   }
 
-  // What was asked from the same place as `d`, and in Tucano Auto of the same request only.
+  // What was asked from the same place as `d`, and in Tucano Zen of the same request only.
   private peersOf(d: Delegation): Delegation[] {
     const all = this.deps.db.delegationsFrom(d.from, d.originConversationId, d.originThreadId)
     const request = this.autoRequest(d)
@@ -4467,7 +4467,7 @@ ${note}`,
       if (now - (last.run.endedAt ?? last.at) < 60_000) continue // its own reply settles it; this is for the ones that never got to
       this.settle(d, last.run.status === 'stopped' ? 'cancelled' : 'failed', last)
     }
-    // In Tucano Auto, one place per request too: a quick one isn't told behind a slow one (see requestOf).
+    // In Tucano Zen, one place per request too: a quick one isn't told behind a slow one (see requestOf).
     const placeKey = (d: Delegation): string => `${replyKey(d.from, d.originConversationId, d.originThreadId)}\u0000${this.autoRequest(d) ?? ''}`
     const places = new Map(db.untoldDelegations(now).map((d) => [placeKey(d), d]))
     // One waiting on an approval of mine wakes no one: I see it, and approve it, under the asker's message.

@@ -1,4 +1,4 @@
-// Tucano Auto on the built app with the real engines: no simulator, and every request costs money.
+// Tucano Zen on the built app with the real engines: no simulator, and every request costs money.
 // Three requests go through the Tuca: one he answers himself, one for one specialist, and one with two
 // independent parts for two specialists. Build first, then run it by hand:
 //   npm run build && node scripts/e2e-tuca-auto-real.mjs [outdir]
@@ -268,12 +268,12 @@ try {
   ;({ app, page } = await launch())
   await page.locator('.sidebar').waitFor()
   await page.locator('.workspace-picker__button').click()
-  await page.locator('.menu__item', { hasText: 'Tucano Auto' }).click()
+  await page.locator('.menu__item', { hasText: 'Tucano Zen' }).click()
   await waitForAuto(page)
   ids = await waitFor('the Tuca and his DM', readIds)
   await app.close()
   app = undefined
-  report.steps.push('first launch: Tucano Auto switched on, the Tuca and his DM made')
+  report.steps.push('first launch: Tucano Zen switched on, the Tuca and his DM made')
 
   // Fixed, cheap models with no computer or web access, for the Tuca and the three seeded agents.
   // Auto stays on in the settings, so the next launch opens in it.
@@ -286,11 +286,11 @@ try {
   report.steps.push('db: models set, effort low, computer and web off; auto on')
 
   ;({ app, page } = await launch())
-  await waitForAuto(page) // the mode is on, so it opens in Tucano Auto
+  await waitForAuto(page) // the mode is on, so it opens in Tucano Zen
   ids = readIds()
   if (!ids) throw new Error('the Tuca or his DM is missing after the relaunch')
   await shot(page, '00-auto-reaberto')
-  report.steps.push('relaunch: opened in Tucano Auto')
+  report.steps.push('relaunch: opened in Tucano Zen')
 
   for (const request of REQUESTS) {
     const sentAt = Date.now()

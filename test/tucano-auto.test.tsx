@@ -1,4 +1,4 @@
-// Tucano Auto: the app as one conversation with the toucan, the team behind it (components/Auto.tsx).
+// Tucano Zen: the app as one conversation with the toucan, the team behind it (components/Auto.tsx).
 // The person sees what they asked and what came back; who the router called, and why, waits in the
 // backstage. The mode is each person's own, and always has its way back to the full app.
 import { renderToStaticMarkup } from 'react-dom/server'
@@ -36,7 +36,7 @@ beforeEach(() => {
   fake = { ...getState(), ready: true, me: { name: 'Zen', initials: 'Z' }, settings: { ...getState().settings, auto: true }, agents: [tuca, bia], conversations: [dm, biaDm], messages: { c1: [ask, handing, reply], c2: [biaAnswer] }, delegations: [asked], artifacts: [{ id: 'f1', name: 'cardapio.pdf', messageId: 'm4', conversationId: 'c2', size: 10, mime: 'application/pdf', at: 3 } as never] }
 })
 
-describe('Tucano Auto', () => {
+describe('Tucano Zen', () => {
   it('shows what was asked and what the Tuca delivered, with the way back to the full app', () => {
     const html = drawn()
     expect(chat(html)).toContain('Um cardápio para receber amigos')

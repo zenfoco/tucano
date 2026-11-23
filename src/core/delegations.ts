@@ -13,7 +13,7 @@ import { describeAgent } from './router'
 
 export const MAX_DELEGATIONS_PER_REPLY = 5
 export const MAX_OPEN_DELEGATIONS = 12 // per asker, everywhere
-export const AUTO_RESULT_MAX = 32_000 // Tucano Auto: the person sees only the Tuca, so what he delivers can't be pointed at a thread
+export const AUTO_RESULT_MAX = 32_000 // Tucano Zen: the person sees only the Tuca, so what he delivers can't be pointed at a thread
 const RESULT_MAX = 8_000 // what goes back to the asker's conversation; the thread keeps it whole
 const TEXT_MAX = 6_000
 const DONE_MAX = 600
@@ -186,7 +186,7 @@ export function teammateNote(what: 'done' | 'asked', to: string, text: string): 
     : L(`[A divisão do trabalho ganhou mais uma parte: ${to} vai fazer ${text.replace(/\s+/g, ' ').trim().slice(0, 300)}. Não faça essa parte.]`, `[The split of the work got one more part: ${to} will do ${text.replace(/\s+/g, ' ').trim().slice(0, 300)}. Don't do that part.]`)
 }
 
-// `auto`: Tucano Auto, where the person has no thread to open: a higher cap, and the note tells the Tuca
+// `auto`: Tucano Zen, where the person has no thread to open: a higher cap, and the note tells the Tuca
 // how to get the rest from whoever did the work (pedir with "continuar") instead of pointing at the thread.
 type AutoCut = { code: string; me: string }
 const cut = (text: string, auto?: AutoCut): string => {
@@ -222,7 +222,7 @@ const quoted = (text: string, auto?: AutoCut): string =>
     .join('\n')
 
 // What the asker is told when it gets the turn back: each thing that came back, by its code, and what to do with it.
-// `auto`: the Tuca in Tucano Auto, the only one the person sees: he delivers the work itself.
+// `auto`: the Tuca in Tucano Zen, the only one the person sees: he delivers the work itself.
 export function returnTask(returned: Returned[], open: { d: Delegation; to: string; channel: string; parked?: boolean }[], me: string, auto = false): string {
   const line = (r: Returned): string => {
     const head = `- [${codeOf(r.d)}] ${r.to}, ${r.channel}`

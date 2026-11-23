@@ -32,7 +32,7 @@ export type PromptOpts = {
   routines?: Routine[] // its own, when it can schedule
   skills?: Skill[] // the active ones it follows, when it has skill tools
   builder?: string // the Tuca's view of the workspace: models, connectors, the team (live)
-  orchestrator?: string // Tucano Auto: the Tuca as the only one the person talks to (src/core/tuca.ts autoOrchestratorSection, live)
+  orchestrator?: string // Tucano Zen: the Tuca as the only one the person talks to (src/core/tuca.ts autoOrchestratorSection, live)
   team?: string // the agents that answer to this one and what it has asked of them (src/core/delegations.ts, live)
   builderGuide?: string // how to propose agents, teams, routines and channels, and the Tuca's guide (stable)
   wiki?: { pages: number; kinds: string[] } // the wiki it may read
