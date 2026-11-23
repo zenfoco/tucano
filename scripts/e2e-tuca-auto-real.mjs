@@ -137,7 +137,7 @@ async function waitFor(label, read, ms = 90_000) {
 }
 
 async function waitForAuto(page) {
-  await page.locator('.auto-field input').waitFor({ timeout: 60_000 })
+  await page.locator('.auto-composer textarea').waitFor({ timeout: 60_000 })
   await page.locator('.auto-opening').waitFor({ state: 'detached', timeout: 10_000 }).catch(() => {})
 }
 
@@ -294,9 +294,9 @@ try {
 
   for (const request of REQUESTS) {
     const sentAt = Date.now()
-    await page.locator('.auto-field input').fill(request.text)
+    await page.locator('.auto-composer textarea').fill(request.text)
     await page.keyboard.press('Enter')
-    await page.waitForFunction(() => document.querySelector('.auto-field input')?.value === '')
+    await page.waitForFunction(() => document.querySelector('.auto-composer textarea')?.value === '')
     const s = await settle(request, sentAt)
     const durationMs = Date.now() - sentAt
     await shot(page, `${request.key}-pronto`)

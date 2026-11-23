@@ -85,8 +85,8 @@ describe('Tucano Auto', () => {
     fake = { ...fake, agents: [tuca], conversations: [dm], messages: {}, delegations: [] }
     const html = drawn()
     expect(html).toContain('Sua equipe ainda está vazia')
-    // Disabled only for lack of text, not of a team: the button is there to press once something is written.
-    expect(html).toContain('placeholder="Fale com o Tucano…"')
+    // The app's own message box, open with no team: what the person writes goes to the Tuca.
+    expect(html).toContain('Mensagem pra Tuca')
   })
 
   it('keeps a stop with Continuar and what the app says in the conversation', () => {

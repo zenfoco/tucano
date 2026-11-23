@@ -31,7 +31,7 @@ import {
   type Message,
   type State
 } from '../store'
-import { ApprovalCard, QuestionCard, ReplyText, StopNote, useDictation, VoiceButton } from './Conversation'
+import { ApprovalCard, Composer, QuestionCard, ReplyText, StopNote } from './Conversation'
 import { ArtifactCard } from './Panel'
 import { Proposals } from './Tuca'
 import { AnswersSummary, NextStepsCard } from './Decisions'
@@ -86,6 +86,7 @@ type Tab = 'trail' | 'memory' | 'routines'
 
 export function AutoMode(): ReactNode {
   const conv = useStore(autoConversation)
+  const tuca = useStore(tucaOf)
   const teamSize = useStore((s) => s.agents.filter(isTeam).length)
   const handed = useStore((s) => handedFrom(s, conv?.id))
   const name = useStore((s) => s.me.name)
@@ -191,7 +192,8 @@ export function AutoMode(): ReactNode {
 
         <AutoChat messages={shown} onWho={showWho} />
 
-        <AutoComposer conversationId={conv?.id} disabled={!conv} />
+        {/* The app's own message box, as in any conversation: the same field, attachments, dictation and send. */}
+        <div className="auto-composer">{conv && tuca && <Composer conversationId={conv.id} members={[tuca]} placeholder={L(`Mensagem pra ${tuca.name}`, `Message ${tuca.name}`)} />}</div>
       </div>
 
       <aside className="auto-backstage" id="auto-backstage" aria-label={L('Bastidores', 'Backstage')} aria-hidden={!open}>
@@ -363,45 +365,6 @@ function Theirs({ message, onWho }: { message: Message; onWho: (id: string) => v
   )
 }
 
-function AutoComposer({ conversationId, disabled }: { conversationId: string | undefined; disabled: boolean }): ReactNode {
-  const [text, setText] = useState('')
-  const [note, setNote] = useState('')
-  const field = useRef<HTMLInputElement>(null)
-  const [dictation, controls] = useDictation((t) => setText((v) => (v ? `${v} ${t}` : t)), setNote, conversationId ?? 'tucano-auto')
-  const send = (): void => {
-    const t = text.trim()
-    if (!t || !conversationId || disabled) return
-    sendMessage(conversationId, t)
-    setText('')
-    field.current?.focus()
-  }
-  return (
-    <div className="auto-composer">
-      {/* Not a form: the microphone's button would be its default one, and Enter would press it. */}
-      <div className="auto-field">
-        <input
-          ref={field}
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key !== 'Enter' || e.shiftKey || e.nativeEvent.isComposing) return
-            e.preventDefault()
-            send()
-          }}
-          autoComplete="off"
-          autoFocus
-          placeholder={L('Fale com o Tucano…', 'Talk to Tucano…')}
-          aria-label={L('Mensagem para o Tucano', 'Message to Tucano')}
-        />
-        <VoiceButton controls={controls} state={dictation} />
-        <button className="auto-send" type="button" disabled={disabled || !text.trim()} aria-label={L('Enviar', 'Send')} onClick={send}>
-          <Icon name="send" size={16} />
-        </button>
-      </div>
-      <div className="auto-hint">{note || L('Sem menu, sem escolher nada. Toque em “quem fez isso?” para ver por dentro.', 'No menu, nothing to pick. Tap “who did this?” to look inside.')}</div>
-    </div>
-  )
-}
 
 // Each request, newest first: who the router called and why, and how each reply went.
 function Trail({ timeline, handed, focus, conversationId }: { timeline: Message[]; handed: Delegation[]; focus: string | undefined; conversationId: string | undefined }): ReactNode {

@@ -17045,57 +17045,11 @@ button.agent-card__now:hover {
   width: 100%;
 }
 
-/* the one field */
+/* the one field: the app's own message box (Composer), under the conversation */
 .auto-composer {
   grid-area: composer;
-  padding: 12px max(32px, calc((100% - 800px) / 2)) 22px;
-  border-top: 1px solid var(--border);
-}
-.auto-field {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 8px 8px 8px 20px;
-  box-shadow: var(--shadow);
-}
-.auto-field:focus-within {
-  border-color: var(--border-strong);
-}
-.auto-field input {
-  flex: 1;
   min-width: 0;
-  border: 0;
-  outline: none;
-  background: transparent;
-  color: var(--text);
-  font: inherit;
-  font-size: 16px;
-}
-.auto-send {
-  width: 44px;
-  height: 44px;
-  flex: none;
-  display: grid;
-  place-items: center;
-  border: 0;
-  border-radius: 50%;
-  background: var(--accent);
-  color: var(--accent-text);
-  cursor: pointer;
-  transition: var(--transition-ui);
-}
-.auto-send:disabled {
-  opacity: 0.45;
-  cursor: default;
-}
-.auto-hint {
-  margin-top: 8px;
-  text-align: center;
-  font-size: 12px;
-  color: var(--text-3);
+  padding: 0 max(16px, calc((100% - 832px) / 2));
 }
 
 /* the backstage */
@@ -17348,8 +17302,7 @@ button.agent-card__now:hover {
     grid-template-areas: 'head' 'stage' 'chat' 'composer';
   }
   .auto-head,
-  .auto-chat,
-  .auto-composer {
+  .auto-chat {
     padding-left: 16px;
     padding-right: 16px;
   }
@@ -17426,14 +17379,7 @@ button.agent-card__now:hover {
 .auto-balloon .auto-link {
   display: block;
 }
-/* the pill already shows focus (its border): no ring of the app's fields inside it */
-.auto-field input:focus,
-.auto-field input:focus-visible {
-  outline: none;
-  box-shadow: none;
-  border: 0;
-  background: transparent;
-}
+
 .auto-team {
   display: flex;
   flex-wrap: wrap;
