@@ -229,31 +229,58 @@ const NONE: Message[] = []
 
 function AutoChat({ messages, onWho }: { messages: Message[]; onWho: (id: string) => void }): ReactNode {
   const box = useRef<HTMLElement>(null)
-  // Follows the end as things come (words still arriving too), unless the person scrolled up to read.
+  const list = useRef<HTMLDivElement>(null)
+  // Follows the end as things come (words still arriving, code drawn, the window resized), unless the
+  // person scrolled up to read. Only the person's own scrolling unpins it: a scroll the layout caused
+  // (the content or the window changing size) keeps following.
   const pinned = useRef(true)
+  const byUs = useRef(false)
+  const follow = (): void => {
+    const el = box.current
+    if (!el || !pinned.current) return
+    byUs.current = true
+    el.scrollTop = el.scrollHeight
+    requestAnimationFrame(() => (byUs.current = false))
+  }
   useEffect(() => {
     const el = box.current
-    if (!el) return
-    const follow = (): void => {
-      if (pinned.current) el.scrollTop = el.scrollHeight
-    }
+    const inner = list.current
+    if (!el || !inner) return
     follow()
-    const watch = new MutationObserver(follow)
-    watch.observe(el, { childList: true, subtree: true, characterData: true })
-    return () => watch.disconnect()
+    const grew = new ResizeObserver(follow)
+    grew.observe(el)
+    grew.observe(inner)
+    const changed = new MutationObserver(follow)
+    changed.observe(inner, { childList: true, subtree: true, characterData: true })
+    return () => {
+      grew.disconnect()
+      changed.disconnect()
+    }
   }, [])
+  // What the person just sent always shows: it pins the end again.
+  const last = messages.at(-1)
+  const mine = useStore((s) => !!last && isMine(s, last.author))
+  useEffect(() => {
+    if (!mine) return
+    pinned.current = true
+    follow()
+  }, [last?.id, mine])
   return (
     <section
       className="auto-chat"
       ref={box}
       aria-live="polite"
+      onWheel={() => (byUs.current = false)}
       onScroll={(e) => {
+        if (byUs.current) return
         const el = e.currentTarget
         pinned.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80
       }}
     >
-      {messages.length === 0 && <p className="auto-empty">{L('Escreva o que você precisa, do seu jeito. Ninguém aqui precisa de comando.', 'Write what you need, your own way. Nothing here needs a command.')}</p>}
-      {messages.map((m) => <Said key={m.id} message={m} onWho={onWho} />)}
+      <div className="auto-chat__list" ref={list}>
+        {messages.length === 0 && <p className="auto-empty">{L('Escreva o que você precisa, do seu jeito. Ninguém aqui precisa de comando.', 'Write what you need, your own way. Nothing here needs a command.')}</p>}
+        {messages.map((m) => <Said key={m.id} message={m} onWho={onWho} />)}
+      </div>
     </section>
   )
 }
