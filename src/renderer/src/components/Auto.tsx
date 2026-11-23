@@ -79,8 +79,9 @@ export function leaveAuto(conversationId?: string, message?: string): void {
   if (panel) openPanel(panel) // a file asked to be opened here opens beside the conversation there
 }
 
-// A reply of the Tuca's that only handed work on: no text of its own, its requests on it.
-const handingOn = (m: Message): boolean => m.author.kind === 'agent' && !!m.run?.delegations?.length && !m.text.trim() && m.run.status !== 'working'
+// A reply of the Tuca's that handed work on (its requests are on it). Whatever he wrote with it shows
+// above the team's line.
+const handingOn = (m: Message): boolean => m.author.kind === 'agent' && !!m.run?.delegations?.length && m.run.status !== 'working'
 
 type Tab = 'trail' | 'memory' | 'routines'
 
@@ -272,7 +273,13 @@ function Said({ message, onWho }: { message: Message; onWho: (id: string) => voi
         <ReplyText text={message.text} />
       </div>
     )
-  if (handingOn(message)) return <TeamWork message={message} onWho={onWho} />
+  if (handingOn(message))
+    return (
+      <>
+        {message.text.trim() && <Theirs message={message} onWho={onWho} />}
+        <TeamWork message={message} onWho={onWho} />
+      </>
+    )
   return <Theirs message={message} onWho={onWho} />
 }
 
